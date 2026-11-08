@@ -452,11 +452,11 @@ pointsAccrued = monthlyNet > 0 ? monthlyNet × ratio : 0
 | 배터리·충전 상태 | Vehicle SDK `EvBattery` + AAOS EV 속성 | ⬜ | V-03. 퍼미션 `CAR_ENERGY`(용량은 `CAR_INFO`). **프로브로 읽기·변화 알림 확인** ([api-feasibility](docs/references/api-feasibility.md)) |
 | 주행 거리·연비 | Vehicle SDK `Odometer`(`CAR_DRIVE`), `Fuel`(`CAR_ENERGY`) | ⬜ | `Odometer` 읽기 확인, **`Fuel.getFuelPercent`는 전기차 에뮬레이터에서 미지원** ([api-feasibility](docs/references/api-feasibility.md)).  Vehicle SDK `2.3.2`, Maven 접근 확인됨 (docs/references/pleos-sdk.md) |
 | 차종 기본값 | Vehicle SDK `CarInfo` | ⬜ | `CAR_INFO`. VIN은 읽힘, **`getCapabilityInfo`는 권한 부족으로 실패** ([api-feasibility](docs/references/api-feasibility.md)) |
-| 현재 위치 | Fused Location SDK (`ai.pleos.playground:FusedLocation:1.1.3`) | ⬜ | Playground에서 **"준비 중"** 표기. V-06 |
+| 현재 위치 | Fused Location SDK (`ai.pleos.playground:FusedLocation:1.1.3`) | ⬜ | Playground에서 **"준비 중"** 표기(신청 버튼 없음)이나 **에뮬레이터에서 위치·근접 알림 동작 확인**, 런타임 권한 부여 필요 ([api-feasibility](docs/references/api-feasibility.md)). V-06 |
 | 경유지·길안내 | NaviHelper SDK (`ai.pleos.playground:NaviHelper:3.0.5`, 경유지 최대 2곳, 경로 옵션) | ⬜ | 신청 없이 사용 가능. V-04. **위치·상태 조회, 목적지 설정·취소는 확인. 에뮬레이터에서는 경로 값이 고정이고 경로 옵션 변경이 반영되지 않음** ([api-feasibility](docs/references/api-feasibility.md)) |
-| 음성 출력 | TextToSpeech SDK (`...:TextToSpeech:3.3.1`) | ⬜ | Playground에서 **"준비 중"** 표기, 서버 연결형(클라이언트 ID/시크릿). V-13 |
+| 음성 출력 | TextToSpeech SDK (`...:TextToSpeech:3.3.1`) | ⬜ | Playground에서 **"준비 중"** 표기, 서버 연결형(클라이언트 ID/시크릿). **호출은 되나 에뮬레이터에서 소리 합성 실패**(`ON_DEVICE_ENGINE_ERROR`). V-13 |
 | 음성 입력 | SpeechToText SDK (`...:SpeechToText:3.3.1`) | ⬜ | Playground에서 **"준비 중"** 표기. V-13 |
-| 대화형 응답 | ~~LLM SDK (Gleo AI)~~ → **Gleo Interface** (Gleo가 앱 function을 호출, 최대 3개, Gleo 측 스키마 승인 필요) — 선택 | ⬜ | **LLM SDK는 2026-10-19 제공 종료.** 에뮬레이터에 Gleo 앱이 없어 시험 불가 ([gleo-interface](docs/references/gleo-interface.md)). D-17 |
+| 대화형 응답 | ~~LLM SDK (Gleo AI)~~ → **Gleo Interface** (Gleo가 앱 function을 호출, 최대 3개, Gleo 측 스키마 승인 필요) — 선택 | ⬜ | **LLM SDK는 2026-10-19 제공 종료.** 에뮬레이터에 Gleo AI 앱(`ai.umos.ambientai`)이 있고 우리 `schema.json`을 읽으며 Callback도 수신하나, **Gleo 음성 엔진이 모델 데이터 문제로 시작하지 못해 음성 호출은 불가** ([gleo-interface](docs/references/gleo-interface.md)). D-17 |
 | 주유소 가격 | 오피넷 유가정보 API (한국석유공사) | ⬜ | V-07 |
 | 충전소 위치·상태 | 한국환경공단 전기자동차 충전소 정보 API (공공데이터포털) | ⬜ | V-07 |
 | 충전 요금 | 충전사업자 공시 요금 | ⬜ | V-05 |
@@ -472,10 +472,11 @@ pointsAccrued = monthlyNet > 0 ? monthlyNet × ratio : 0
 | **V-03** | `EvBattery` API와 AAOS EV 속성의 에뮬레이터 지원 범위, 차종별 지원(`checkXXXCapability`), 잔량(%) → kWh 환산 정확도. **2026-11-08 결과: `EvBattery` 읽기·변화 알림 동작 확인, AAOS 속성 직접 접근과 `checkXXXCapability`는 미시험** | 차종별 배터리 용량 설정값 사용 |
 | **V-04** | NaviHelper와 외부 경로 API의 연결 가능 범위 (후보 비교는 외부 API, 경유지 추가·경로 옵션 전환은 NaviHelper). **2026-11-08 결과: 목적지 설정·취소·상태 이벤트는 동작, 경로 옵션 변경은 에뮬레이터에서 반영되지 않음, 경유지(`addWaypoint`)는 미시험** | 외부 API 결과를 앱 내 표시, 길안내 연동은 경유지 좌표 전달 수준으로 축소 |
 | **V-05** | 충전사업자별 요금을 API로 받을 수 있는가 | 공시 요금을 정기 수집해 자체 DB 관리 |
-| **V-06** | Fused Location SDK 제공 시점. **2026-11-06 확인: Playground에서 "준비 중(신청 불가)"** | Android 표준 위치 API |
+| **V-06** | Fused Location SDK 제공 시점. **2026-11-06 확인: Playground에서 "준비 중(신청 불가)"**. **2026-11-08 결과: 에뮬레이터에서는 동작**(위치 수신, 근접 알림 등록). 단 `FUSED_LOCATION`은 런타임 권한 | Android 표준 위치 API |
 | **V-12** | 연료 잔량(L)·차량 속도를 Vehicle SDK로 읽을 수 있는가. 도메인 목록에는 `Fuel`(연비)·`EvBattery`가 있으나 잔량·속도 항목은 문서에서 못 찾음. **2026-11-08 결과: SDK에 속도·가속도 API 없음(확인), `Fuel.getFuelPercent`는 전기차 이미지에서 미지원** | AAOS Car API(`FUEL_LEVEL`, `PERF_VEHICLE_SPEED`)로 읽고, 필요한 퍼미션이 Pleos 승인 범위인지 확인 |
-| **V-13** | TTS·STT SDK 사용 신청 가능 여부 ("준비 중" 표기). 가능하더라도 서버 연결형이라 클라이언트 ID/시크릿 필요 | Android 표준 `TextToSpeech`/`SpeechRecognizer` 대체 (단, 차량 이미지에서 동작 확인 필요) |
+| **V-13** | TTS·STT SDK 사용 신청 가능 여부 ("준비 중" 표기). 가능하더라도 서버 연결형이라 클라이언트 ID/시크릿 필요. **2026-11-08 결과: TTS SDK 호출·권한(`TTS_SERVICE`)은 통과, 에뮬레이터에서 소리 합성은 실패(온디바이스 엔진 오류), 서버 모드 등록은 미시험. STT 미시험** | Android 표준 `TextToSpeech`/`SpeechRecognizer` 대체 (단, 차량 이미지에서 동작 확인 필요) |
 | **V-14** | 선언할 퍼미션이 Pleos App Market 사전 승인 범위인지 확인. **미승인 퍼미션 선언·호출 시 앱 심사 탈락** | 실제 쓰는 API의 최소 퍼미션만 선언 |
+| **V-15** | 캐릭터 연출(투명 이미지·애니메이션·영상·3D)을 에뮬레이터에 원하는 시점에 띄울 수 있는가. **2026-11-08 결과: 기어 P(정차)에서 투명 PNG, 투명 WebP·GIF 애니메이션, Lottie, H.264·HEVC·AV1·VP9 영상, glTF 3D(WebView, 12~17fps) 모두 표시됨(임시 에셋). APNG는 움직이지 않음. 알파 영상, MKV/3GP/MOV, 기어 P가 아닐 때의 차단, SOC 트리거는 미확인** ([media-feasibility](docs/references/media-feasibility.md)) | 연출 형식을 투명 WebP 애니메이션·Lottie 중심으로 제한 |
 | **V-07** | 주유소·충전소별 가격·상태 데이터의 갱신 주기와 호출 한도 | 캐싱, 가격 기준 시각 표기 |
 | **V-08** | 잔량 변화로 추정한 실제 주유량·충전량의 정확도 (센서 해상도, 주행 중 연료 소모 보정) | 임계값·최소량 보정 (D-05) |
 | **V-09** | 추천 비용 산식과 확정 비용 산식이 일관된가 (같은 `CostCalculator`를 쓰는지) | 단일 순수 함수로 통합 |
@@ -523,6 +524,7 @@ pointsAccrued = monthlyNet > 0 ? monthlyNet × ratio : 0
 | **D-14** | 실측 이력 없을 때 연비·전비, 비효율 정산의 "평소값" 최소 샘플 | "최근 실측값", "비슷한 도로 유형의 최근 평균" | 샘플 부족 시 `CarInfo` 차종별 기본값, 정산은 최소 샘플 이후 | ⬜ |
 | **D-15** | 주행/정차 판별 기준(연출 허용 조건) | "정차·주차 중" | 속도 0 + 기어 P/N 또는 일정 시간 정지 | ⬜ |
 | **D-17** | F05·F09의 "LLM 대화형 캐릭터"를 어떻게 대체할지 | 원본은 LLM SDK(Gleo AI) 사용. **LLM SDK는 2026-10-19 제공 종료**, 대체인 Gleo Interface는 Gleo → 앱 방향 function 호출(최대 3개)만 문서화되고 승인이 필요 ([gleo-interface](docs/references/gleo-interface.md)) | 캐릭터 대화는 템플릿 음성(자체 TTS)으로 구현, Gleo Interface는 승인되면 추가하는 가산 기능으로 둠 | ⬜ |
+| **D-18** | 캐릭터 연출의 형식·분량·시점 | 기획서에는 "캐릭터 애니메이션", "배경 없이", "정차·주차 중에만"만 있고 형식(영상/2D/3D), 분량(레벨 11단계 × 캐릭터 2종), 재생 길이, 다단계 레벨업과 주행 중 레벨업의 연출 순서가 없음 ([media-feasibility](docs/references/media-feasibility.md) 1.3) | 투명 배경이 필요하므로 투명 애니메이션(WebP 등) 중심으로 시작, 주행 중 발생한 레벨업은 정차 후 큐로 연출 | ⬜ |
 | **D-16** | 위치·주행 데이터 저장 범위와 개인정보 처리 | 원본에 언급 없음 | 서버 전송 없이 단말 내 저장을 기본으로 하고, 필요 시 별도 기획 | ⬜ |
 
 ---

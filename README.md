@@ -186,3 +186,4 @@ flowchart LR
 | [docs/references/pleos-sdk.md](docs/references/pleos-sdk.md) | 구현 담당자 | Pleos SDK 조사·실측 결과 |
 | [docs/references/api-feasibility.md](docs/references/api-feasibility.md) | 구현 담당자 | SDK API를 에뮬레이터에서 직접 호출한 사용 가능성 테스트 결과 |
 | [docs/references/gleo-interface.md](docs/references/gleo-interface.md) | 구현 담당자 | Gleo AI 연동 방식, 스키마 초안, Pleos에 문의할 질문 |
+| [docs/references/media-feasibility.md](docs/references/media-feasibility.md) | 구현·디자인 담당자 | 캐릭터 연출이 나오는 시점(기획서 기준)과 이미지·애니메이션·영상·3D 표시 시험 결과 |
