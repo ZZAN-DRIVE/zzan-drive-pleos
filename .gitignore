@@ -1,0 +1,25 @@
+# OS / editor
+.DS_Store
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# Gradle / Android
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.apk
+*.aab
+!release/*.apk
+
+# Secrets
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example
+secrets.properties
