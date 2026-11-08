@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SDK 프로브 앱을 빌드 -> 설치 -> 실행하고 logcat 결과를 출력한다.
-# 사용법: scripts/probe.sh [vehicle|navi|all]   (기본 all)
+# 사용법: scripts/probe.sh [vehicle|navi|all|loc|tts|control]   (기본 all = vehicle + navi)
 # 전제: scripts/emulator.sh start 로 에뮬레이터가 부팅되어 있어야 한다.
 set -euo pipefail
 
@@ -9,7 +9,10 @@ case "$SUITE" in
   vehicle) DEFAULT_WAIT=8 ;;
   navi)    DEFAULT_WAIT=50 ;;
   all)     DEFAULT_WAIT=56 ;;
-  *) echo "usage: $0 [vehicle|navi|all]"; exit 2 ;;
+  loc)     DEFAULT_WAIT=20 ;;
+  tts)     DEFAULT_WAIT=25 ;;
+  control) DEFAULT_WAIT=8 ;;
+  *) echo "usage: $0 [vehicle|navi|all|loc|tts|control]"; exit 2 ;;
 esac
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
