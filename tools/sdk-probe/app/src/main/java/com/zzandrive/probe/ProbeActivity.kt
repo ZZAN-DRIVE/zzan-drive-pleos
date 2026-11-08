@@ -1,5 +1,12 @@
 package com.zzandrive.probe
 
+import ai.pleos.playground.location.fused.FusedLocation
+import ai.pleos.playground.location.fused.listener.FusedLocationListener
+import ai.pleos.playground.location.fused.listener.ProximityAlertListener
+import ai.pleos.playground.location.fused.model.LocationData
+import ai.pleos.playground.location.fused.model.ProximityAlertEvent
+import ai.pleos.playground.location.fused.model.ProximityAlertRequest
+import ai.pleos.playground.location.fused.model.ProximityTransition
 import ai.pleos.playground.navi.constants.NaviErrorCode
 import ai.pleos.playground.navi.constants.NavigationStatus
 import ai.pleos.playground.navi.constants.RouteOption
@@ -10,6 +17,12 @@ import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.RouteStateInfo
 import ai.pleos.playground.navi.helper.NaviHelper
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
+import ai.pleos.playground.tts.TextToSpeech
+import ai.pleos.playground.tts.constant.ErrorType
+import ai.pleos.playground.tts.constant.Mode
+import ai.pleos.playground.tts.listener.EventListener as TtsEventListener
+import ai.pleos.playground.tts.listener.OnInitializeListener
+import ai.pleos.playground.tts.listener.OnServerConnectionListener
 import ai.pleos.playground.vehicle.Vehicle
 import ai.pleos.playground.vehicle.listener.EvBatteryStateOfChargeListener
 import ai.pleos.playground.vehicle.listener.FuelPercentListener
@@ -20,10 +33,11 @@ import android.os.Looper
 import android.util.Log
 import android.widget.ScrollView
 import android.widget.TextView
+import java.util.Locale
 
 /**
  * Throwaway probe: do the Pleos SDKs respond on the emulator?
- * Pick a suite with an intent extra: `--es suite vehicle|navi|all` (default: all).
+ * Pick a suite with an intent extra: `--es suite vehicle|navi|all|loc|tts|control` (default: all = vehicle + navi).
  * Results go to the screen and to logcat (tag "ZzanProbe").
  */
 class ProbeActivity : Activity() {
@@ -32,6 +46,8 @@ class ProbeActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private var vehicle: Vehicle? = null
     private var navi: NaviHelper? = null
+    private var fused: FusedLocation? = null
+    private var tts: TextToSpeech? = null
 
     private val socListener = object : EvBatteryStateOfChargeListener {
         override fun onEvBatteryStateOfChargeUpdated(p0: Int?) = log("PUSH  EvBattery.SOC -> $p0 %")
@@ -60,11 +76,33 @@ class ProbeActivity : Activity() {
         out = TextView(this).apply { textSize = 16f; setPadding(32, 32, 32, 32) }
         setContentView(ScrollView(this).apply { addView(out) })
 
+        handleGleoActivityAction(intent)
         val suite = intent?.getStringExtra("suite") ?: "all"
         log("== ZZAN SDK probe start (suite=$suite) ==")
         // Vehicle and NaviHelper bind to services; give them a moment after initialize().
         if (suite == "vehicle" || suite == "all") startVehicle()
         if (suite == "navi" || suite == "all") startNavi(delayMs = if (suite == "all") 6000 else 0)
+        if (suite == "loc") startLocation()
+        if (suite == "tts") startTts()
+        if (suite == "control") startControl()
+    }
+
+    override fun onNewIntent(intent: android.content.Intent?) {
+        super.onNewIntent(intent)
+        handleGleoActivityAction(intent)
+    }
+
+    /** Gleo Action for component "activity": the function name is the intent action. */
+    private fun handleGleoActivityAction(i: android.content.Intent?) {
+        if (i?.action != "GET_SAVINGS_SUMMARY") return
+        val raw = i.getStringExtra("ACTION_PARAM") ?: "{}"
+        log("GLEO  action received (activity): ${i.action} params=$raw")
+        GleoCallback.send(
+            this,
+            functionName = "GET_SAVINGS_SUMMARY",
+            status = "success",
+            message = "Probe received the request and replied with a dummy result."
+        )
     }
 
     // ---------------------------------------------------------------- Vehicle
@@ -175,6 +213,129 @@ class ProbeActivity : Activity() {
         main.postDelayed({ log("-- navi scenario finished --") }, at)
     }
 
+    // ---------------------------------------------------------------- FusedLocation ("Coming Soon" in portal)
+
+    private val locListener = object : FusedLocationListener {
+        override fun onChanged(data: LocationData?) =
+            log("LOC   onChanged " + (data?.let { "lat=${it.latitude} lon=${it.longitude} heading=${it.heading} confidence=${it.confidence} t=${it.timestampMillis}" } ?: "null"))
+        override fun onError(e: Exception) = log("LOC   onError: $e")
+    }
+    private val proxListener = object : ProximityAlertListener {
+        override fun onRegistered(alertId: String) = log("LOC   proximity onRegistered id=$alertId")
+        override fun onTransition(event: ProximityAlertEvent) = log("LOC   proximity onTransition id=${event.alertId} ${event.transition}")
+        override fun onError(e: Exception) = log("LOC   proximity onError: $e")
+    }
+
+    private fun startLocation() {
+        val f = FusedLocation(applicationContext)
+        fused = f
+        guarded("FusedLocation.isSupported") { log("LOC   isSupported() = ${f.isSupported()}") }
+        guarded("FusedLocation.initialize") {
+            f.initialize()
+            log("LOC   initialize() returned")
+        }
+        main.postDelayed({
+            guarded("getLastKnownLocation") { f.getLastKnownLocation(locListener) }
+            guarded("registerFusedLocationCallback") { f.registerFusedLocationCallback(locListener) }
+            guarded("addProximityAlert") {
+                // 500 m around the sample destination used for NaviHelper.
+                f.addProximityAlert(
+                    ProximityAlertRequest(37.48544722, 127.03636666, 500f, setOf(ProximityTransition.ENTER)),
+                    proxListener
+                )
+            }
+            log("-- location calls issued --")
+        }, 7000)
+    }
+
+    // ---------------------------------------------------------------- TextToSpeech ("Coming Soon" in portal)
+
+    private val ttsEvents = object : TtsEventListener {
+        override fun onStart() = log("TTS   onStart")
+        override fun onReady() = log("TTS   onReady")
+        override fun onDone() = log("TTS   onDone")
+        override fun onError(type: ErrorType) = log("TTS   onError $type")
+        override fun onStop() = log("TTS   onStop")
+        override fun onUpdatedRms(rms: Double) {}
+    }
+
+    /** ON_DEVICE needs no app registration per docs; SERVER without registration shows what a missing client ID does. */
+    private fun startTts() {
+        val t = TextToSpeech(applicationContext, Mode.ON_DEVICE)
+        tts = t
+        guarded("TextToSpeech.initialize(ON_DEVICE)") {
+            t.initialize(object : OnInitializeListener {
+                override fun onSuccess() {
+                    log("TTS   ON_DEVICE initialize onSuccess")
+                    // Docs order: initialize() first, then addEventListener() (it needs the initialized engine).
+                    guarded("TTS addEventListener") { t.addEventListener(ttsEvents) }
+                    guarded("TTS setLocale") { t.setLocale(Locale.KOREAN) }
+                    guarded("TTS speak") { t.speak("짠드라이브 음성 테스트입니다", false) }
+                }
+                override fun onFailure(type: ErrorType) = log("TTS   ON_DEVICE initialize onFailure $type")
+            })
+        }
+        main.postDelayed({
+            val s = TextToSpeech(applicationContext, Mode.SERVER)
+            guarded("TextToSpeech.initialize(SERVER)") {
+                s.initialize(object : OnInitializeListener {
+                    override fun onSuccess() {
+                        log("TTS   SERVER initialize onSuccess (not registered yet)")
+                        guarded("TTS SERVER addEventListener") { s.addEventListener(ttsEvents) }
+                        guarded("TTS SERVER speak without registration") { s.speak("server test", false) }
+                    }
+                    override fun onFailure(type: ErrorType) = log("TTS   SERVER initialize onFailure $type")
+                })
+            }
+            main.postDelayed({ guarded("TTS SERVER release") { s.release() } }, 8000)
+        }, 10000)
+    }
+
+    // ---------------------------------------------------------------- Vehicle control ("Vehicle Control" = Coming Soon in portal)
+
+    /** Non-destructive: capability checks, then write back the value we just read. */
+    private fun startControl() {
+        val v = Vehicle(applicationContext)
+        vehicle = v
+        try {
+            v.initialize()
+            log("Vehicle.initialize() returned")
+        } catch (e: Exception) {
+            log("Vehicle.initialize() THREW: $e")
+            return
+        }
+        main.postDelayed({
+            val ev = v.getEvBattery()
+            guarded("checkEvChargeSwitchCapabilities") {
+                ev.checkEvChargeSwitchCapabilities(
+                    { c -> log("CTRL  chargeSwitch capability accessType=${c?.accessType}") },
+                    { e -> log("CTRL  chargeSwitch capability FAIL: $e") }
+                )
+            }
+            guarded("checkEvChargePortOpenCapabilities") {
+                ev.checkEvChargePortOpenCapabilities(
+                    { c -> log("CTRL  chargePortOpen capability accessType=${c?.accessType}") },
+                    { e -> log("CTRL  chargePortOpen capability FAIL: $e") }
+                )
+            }
+            guarded("isEvChargePortOpen -> setEvChargePortOpen(same value)") {
+                ev.isEvChargePortOpen(
+                    { cur ->
+                        log("CTRL  chargePortOpen current=$cur, writing the same value back")
+                        guarded("setEvChargePortOpen") {
+                            ev.setEvChargePortOpen(
+                                cur ?: false,
+                                { r -> log("CTRL  setEvChargePortOpen OK result=$r") },
+                                { e -> log("CTRL  setEvChargePortOpen FAIL: $e") }
+                            )
+                        }
+                    },
+                    { e -> log("CTRL  read FAIL: $e") }
+                )
+            }
+        }, 2000)
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private fun <T> probe(name: String, call: ((T) -> Unit, (Exception) -> Unit) -> Unit) {
@@ -204,6 +365,22 @@ class ProbeActivity : Activity() {
                 v.release()
             } catch (e: Exception) {
                 Log.w(TAG, "vehicle release failed: $e")
+            }
+        }
+        fused?.let { f ->
+            try {
+                f.unregisterFusedLocationCallback(locListener)
+                f.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "fused release failed: $e")
+            }
+        }
+        tts?.let { t ->
+            try {
+                try { t.removeEventListener(ttsEvents) } catch (_: Exception) {}
+                t.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "tts release failed: $e")
             }
         }
         navi?.let { n ->

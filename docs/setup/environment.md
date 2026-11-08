@@ -126,6 +126,9 @@ scripts/emulator.sh console     # 브라우저를 대신 열어 줌 (Mac)
 scripts/probe.sh            # vehicle + navi 모두 (약 1분)
 scripts/probe.sh vehicle    # Vehicle State만 (약 8초)
 scripts/probe.sh navi       # NaviHelper만 (약 50초)
+scripts/probe.sh loc        # FusedLocation (먼저 권한 부여, 문제 해결 표 참고)
+scripts/probe.sh tts        # TextToSpeech
+scripts/probe.sh control    # Vehicle 제어 API (상태를 바꾸지 않음)
 ```
 
 빌드 → 설치 → 실행 → 결과 출력까지 한 번에 합니다. 각 항목의 결과 해석은 [API 사용 가능성 테스트 결과](../references/api-feasibility.md)에 있습니다. 처음 실행 시 Gradle과 라이브러리를 내려받아 **몇 분** 걸립니다. 결과는 두 곳에 나옵니다.
@@ -173,7 +176,8 @@ scripts/probe.sh navi       # NaviHelper만 (약 50초)
 | 값 변경 시 `emulator_inactive` | 브라우저에서 `http://127.0.0.1:8088/` 를 열어 둔 상태인지 확인 |
 | 값을 바꿨는데 `PUSH` 가 안 나옴 | ① 프로브가 구독하는 것은 **SOC뿐**. ② 앱이 백그라운드이면 알림이 **지연**됨(앞으로 가져오면 한꺼번에 도착) → 앱을 앞에 띄우고 확인. ③ 그래도 안 오면 `adb logcat -s ZzanProbe:I` 에서 `register` 관련 오류 확인 |
 | `curl` 로 값을 바꾸면 `emulator_inactive` | 정상 동작. 값 변경은 **브라우저에서** 해야 함 |
-| `SecurityException: ... need Permission` | `AndroidManifest.xml` 에 해당 권한이 없음. 예) 배터리 용량은 `CAR_INFO` 필요 |
+| `SecurityException: ... need Permission` | `AndroidManifest.xml` 에 해당 권한이 없음. 예) 배터리 용량은 `CAR_INFO`, TTS는 `TTS_SERVICE` 필요 |
+| `need Permission pleos.car.permission.FUSED_LOCATION` (선언했는데도) | 런타임 권한이라 별도 부여가 필요. 에뮬레이터는 사용자 10이므로 `adb shell pm grant --user 10 com.zzandrive.probe pleos.car.permission.FUSED_LOCATION` |
 | `property ID ... not supported` | 이 에뮬레이터 이미지가 지원하지 않는 항목(예: 연료). 코드 문제가 아님 → Mock 사용 |
 | 앱 값이 비어 있거나 실패 | `Vehicle.initialize()` 직후에는 서비스 연결이 보장되지 않음. 약 2초 뒤에 호출 |
 | 같은 AVD를 두 번 실행해 오류 | 먼저 `scripts/emulator.sh stop` |
@@ -208,7 +212,7 @@ adb logcat -s ZzanProbe:I
 
 ## 6. 아직 알 수 없는 것
 
-- Gleo AI: 에뮬레이터에 Gleo 앱이 없어 시험 불가. 연동 방식과 문의 사항은 [gleo-interface.md](../references/gleo-interface.md)
+- Gleo AI: 앱이 있고 스키마를 읽으며 우리 Callback도 받지만, **Gleo 음성 엔진이 모델 데이터를 못 찾아 음성 명령은 현재 불가**. 자세한 내용과 문의 사항은 [gleo-interface.md](../references/gleo-interface.md)
 - **백그라운드 앱이 차량 값 변화를 제때 받는 방법.** 포그라운드에서는 수신 확인, 백그라운드에서는 앱이 앞으로 올 때까지 지연됨. 충전·주유 감지(F02·F03)를 운전 중 항상 하려면 포그라운드 서비스 등이 필요한지 확인해야 함
 - 연료·속도·위치 값을 에뮬레이터에 넣는 방법 (전기차 이미지는 연료 항목 미지원 → Mock 필요)
 - TTS / STT / FusedLocation: Playground에서 "준비 중"으로 확인됨 (2026-11-08). 열리면 시험

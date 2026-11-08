@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}canvas{display:block}</style>
+<script src="/assets/media/three.min.js"></script>
+<script src="/assets/media/GLTFLoader.js"></script>
+</head><body>
+<script>
+function log(m){console.log('[viewer] '+m)}
+try {
+  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setClearColor(0x000000, 0);
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+  const gl = renderer.getContext();
+  log('webgl=' + gl.getParameter(gl.VERSION) + ' | renderer=' + gl.getParameter(gl.RENDERER));
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 1, 2000);
+  cam.position.set(0, 90, 280);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(100, 200, 100); scene.add(dl);
+  let mixer = null; const clock = new THREE.Clock();
+  new THREE.GLTFLoader().load('/assets/media/fox.glb', g => {
+    scene.add(g.scene);
+    if (g.animations.length) { mixer = new THREE.AnimationMixer(g.scene); mixer.clipAction(g.animations[Math.min(2, g.animations.length-1)]).play(); }
+    log('model loaded; animations=' + g.animations.length);
+  }, undefined, e => log('LOAD ERROR ' + e));
+  let frames = 0, t0 = performance.now();
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (mixer) mixer.update(clock.getDelta());
+    renderer.render(scene, cam);
+    frames++;
+    const dt = performance.now() - t0;
+    if (dt > 2000) { log('fps=' + (frames*1000/dt).toFixed(1)); frames = 0; t0 = performance.now(); }
+  })();
+} catch (e) { log('INIT ERROR ' + e); }
+</script></body></html>

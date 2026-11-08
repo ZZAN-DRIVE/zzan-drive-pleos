@@ -3,9 +3,10 @@
 짠드라이브가 쓰려는 Pleos SDK 기능이 **에뮬레이터에서 실제로 불러와지고 쓸 수 있는지** 직접 호출해 확인한 기록입니다. 문서를 읽고 추정한 내용이 아니라, 아래 "재현 방법"의 명령으로 얻은 결과만 적습니다.
 
 - 시험일: 2026-11-08
-- 환경: Mac(M1 Pro) / Pleos Connect Emulator 2.1.0 (Android 14, API 34, 전기차 이미지) / Vehicle SDK 2.3.2 / NaviHelper SDK 3.0.5
+- 환경: Mac(M1 Pro) / Pleos Connect Emulator 2.1.0 (Android 14, API 34, 전기차 이미지) / Vehicle SDK 2.3.2 / NaviHelper SDK 3.0.5 / FusedLocation SDK 1.1.3 / TextToSpeech SDK 3.3.1
 - 시험 코드: [tools/sdk-probe](../../tools/sdk-probe/) (버리는 프로브 앱, 제품 코드 아님)
-- 범위: Playground에서 **"사용 가능"** 으로 표시되는 **Vehicle State**, **NaviHelper** 만. FusedLocation·TTS·STT·Vehicle Control은 "준비 중"이라 시험하지 않음.
+- 범위: Playground에서 **"사용 가능"** 인 **Vehicle State**, **NaviHelper**, 그리고 **"준비 중(Coming Soon)"** 으로 표시된 **FusedLocation**, **TextToSpeech**, **Vehicle Control**(제어 API). SpeechToText는 마이크가 필요해 시험하지 않음.
+- **"Coming Soon"의 의미:** 공식 문서상 "API 제공 준비 중인 상태로 **신청 버튼이 나타나지 않습니다**"이며, 기술적으로 막혀 있다는 뜻이 아닙니다. 실제로 아래 7장처럼 에뮬레이터에서 일부는 동작합니다. 다만 **앱 심사·배포 시 허용되는지는 확인하지 못했습니다.**
 
 > **주의:** 이 결과는 **에뮬레이터** 기준입니다. 에뮬레이터가 값을 흉내 내지 못하는 항목은 "SDK가 안 된다"가 아니라 "여기서는 확인 못 한다"일 수 있습니다. 판정 칸에 이를 구분해 적었습니다.
 
@@ -25,6 +26,9 @@
 | 목적지 설정·취소 | NaviHelper `requestRoute`, `cancelRoute` | ✅ | 호출·이벤트(`onRouteStarted`, `onRouteCancelled`) 정상 |
 | **경로 비용 (F01·F04)** | NaviHelper `onRouteStarted`/`getDestinationInfo`의 거리·시간·통행료 | ⚠️ | 값은 오지만 **고정값처럼 보임**(거리 50, 시간 60, 통행료 0). 실제 경로 계산 여부는 에뮬레이터에서 확인 불가 |
 | 경로 옵션 비교 (F04) | NaviHelper `changeRouteOption(FREE / SHORT_TIME)` | ❌ | 호출은 오류 없이 되지만 **변경이 반영되지 않음** (이벤트 없음, 옵션·값 그대로) |
+| **현재 위치·근접 알림** (주유소 근처 판단) | FusedLocation `getLastKnownLocation`, `registerFusedLocationCallback`, `addProximityAlert` | ✅ | 위치가 초당 1회 수신, 근접 알림 등록 성공. **런타임 권한 부여가 필요** (7장). 위치값은 에뮬레이터 기본값(미국 구글 본사) |
+| 음성 안내 (F05) | TextToSpeech `ON_DEVICE` / `SERVER` | ⚠️ | SDK 호출·권한은 통과, **소리 합성은 실패** (`ON_DEVICE_ENGINE_ERROR`). 서버 모드는 클라이언트 등록 후 시험 필요 |
+| 차량 제어 (Vehicle Control) | `EvBattery.setEvChargePortOpen` 등 set API | ✅ | `CONTROL_CAR_ENERGY` 권한으로 동작 (현재와 같은 값을 쓰는 방식으로만 시험) |
 
 ## 2. Vehicle State 상세
 
@@ -95,13 +99,49 @@ cancelRoute              -> onRouteCancelled, onNavigationStatus FREE_DRIVE
 scripts/emulator.sh start            # 에뮬레이터 실행
 scripts/probe.sh vehicle             # Vehicle State 시험 (약 8초)
 scripts/probe.sh navi                # NaviHelper 시험 (약 50초, 10단계 시나리오)
+scripts/probe.sh loc                 # FusedLocation 시험 (먼저 7장의 권한 부여 필요)
+scripts/probe.sh tts                 # TextToSpeech 시험 (약 28초)
+scripts/probe.sh control             # Vehicle 제어 API 시험 (상태를 바꾸지 않는 방식)
 ```
 
 결과는 터미널과 에뮬레이터의 `ZZAN SDK Probe` 화면, `adb logcat -s ZzanProbe:I`에 같은 내용으로 나옵니다. 값을 바꿔 보려면 [환경 세팅 문서](../setup/environment.md)의 Virtual Console 절차를 따릅니다.
 
 ## 6. 시험하지 않았거나 모르는 것
 
-- FusedLocation, TextToSpeech, SpeechToText, Vehicle Control: Playground에서 "준비 중"이라 시험하지 않음. 클라이언트 ID/시크릿은 이 항목들용이며, **Vehicle과 NaviHelper는 필요하지 않았음** (코드에도 넣지 않음).
-- Gleo AI: 에뮬레이터에 Gleo 앱 본체가 없고 테스트 방법이 문서에 없음 ([pleos-sdk.md 6.3](pleos-sdk.md)).
+- SpeechToText: 마이크가 필요해 시험하지 않음.
+- TextToSpeech `SERVER` 모드의 앱 등록(`registerApp`): 클라이언트 ID/시크릿이 필요한 단계라 시험하지 않음. 시크릿을 코드·로그에 남기지 않는 방식을 정한 뒤 진행해야 함.
+- 클라이언트 ID/시크릿은 **Vehicle, NaviHelper, FusedLocation에는 필요하지 않았음** (코드에도 넣지 않음).
+- Gleo AI: 에뮬레이터에 Gleo AI 앱이 있고 우리 스키마를 읽는 것까지 확인. 실제 호출은 미확인 ([gleo-interface.md](gleo-interface.md)).
 - 연료 이미지, 실차, 위치를 바꿔 가며 하는 NaviHelper 시험.
 - `CarInfo.getCapabilityInfo`에 필요한 권한.
+- "Coming Soon" SDK가 **Pleos 앱 마켓 심사·배포 때 사용 허용되는지** (문서에 없음, Pleos 문의 필요).
+- FusedLocation 위치를 바꾸는 방법, 앱 안에서 런타임 권한을 요청하는 흐름.
+
+## 7. "Coming Soon" SDK 시험 상세와 권한 함정
+
+### 7.1 FusedLocation 1.1.3
+
+- 호출 순서: `FusedLocation(context)` → `isSupported()` → `initialize()` → `getLastKnownLocation` / `registerFusedLocationCallback` / `addProximityAlert`.
+- 결과: `isSupported() = true`, 위치 콜백이 **초당 1회**, 근접 알림 `onRegistered` 성공. 위치는 `37.4219983, -122.084`(에뮬레이터 기본값, 미국 구글 본사). 같은 시각 NaviHelper가 준 현재 위치(성남 수정구)와 **다름** → 두 SDK의 위치 소스가 서로 다른 것으로 보임.
+- **함정 1: `pleos.car.permission.FUSED_LOCATION`은 런타임(dangerous) 권한입니다.** 매니페스트에 선언만 하면 `SecurityException: need Permission pleos.car.permission.FUSED_LOCATION`이 납니다. 실제 앱은 런타임 요청이 필요하고, 시험에서는 adb로 부여했습니다.
+- **함정 2: 에뮬레이터는 앱이 사용자 10(운전자 사용자)으로 실행됩니다.** `adb shell pm grant`는 기본이 사용자 0이라 **효과가 없었고**, `--user 10`을 붙여야 했습니다.
+
+```bash
+adb shell pm grant --user 10 com.zzandrive.probe pleos.car.permission.FUSED_LOCATION
+```
+
+- `FusedLocationListener.onChanged`의 파라미터는 null 허용(`LocationData?`)입니다.
+
+### 7.2 TextToSpeech 3.3.1
+
+- 필요 권한: `pleos.car.permission.TTS_SERVICE`(normal, 선언만 하면 됨). 없으면 `SecurityException: Permission ... TTS_SERVICE is required`.
+- **호출 순서가 중요:** `initialize()` → (성공 콜백 안에서) `addEventListener()` 순서여야 합니다. 리스너를 먼저 등록하면 `UninitializedPropertyAccessException: lateinit property tts has not been initialized`가 납니다.
+- `ON_DEVICE`: 초기화 `onSuccess` → `onReady` → `onStart` → **`onError ON_DEVICE_ENGINE_ERROR`**. 문서는 이 모드가 앱 등록 없이 쓸 수 있다고 하지만, **이 에뮬레이터에서는 합성에 실패**했습니다(온디바이스 모델 파일이 없는 것으로 추정, 미확인).
+- `SERVER`(앱 등록 전): 초기화는 성공하고 `speak` 후 `onError UNKNOWN`. 등록(`registerApp`) 이후 동작은 시험하지 않았습니다.
+- 에뮬레이터에는 음성 서비스(`ai.pleos.playground.caas`)가 설치돼 있습니다.
+
+### 7.3 Vehicle Control (제어 API)
+
+- `EvBattery.checkEvChargeSwitchCapabilities` / `checkEvChargePortOpenCapabilities`의 `accessType`이 모두 `READ_WRITE`.
+- `isEvChargePortOpen`으로 현재 값(`true`)을 읽고 **같은 값으로** `setEvChargePortOpen`을 호출 → `onComplete result=true`. 차량 상태는 바뀌지 않았습니다.
+- 필요 권한: `CONTROL_CAR_ENERGY`(normal). 즉 포털의 "Vehicle Control: Coming Soon"과 별개로 Vehicle SDK의 set API는 이 에뮬레이터에서 동작합니다.
