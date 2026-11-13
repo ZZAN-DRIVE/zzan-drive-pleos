@@ -1,0 +1,137 @@
+# Answers that are easy to misread, and what they must mean. Same format as answers.tsv.
+# An ambiguous answer may also be read as a no (the safe side: nothing is navigated), never as a yes it is not.
+CONSENT	null	왜 가까운 데로 가	Why
+CONSENT	null	혹시 가까운 데로 가	Unknown
+CONSENT	null	뭐 하러 가까운 데로 가	Unknown|Why
+CONSENT	null	거기 멀면 가까운 데로 가	Unknown
+CONSENT	null	차 막히면 가까운 데로 가 줘	Unknown
+CONSENT	null	아니 가까운 데로 가	Nearest
+CONSENT	null	그냥 가까운 데로 가	Nearest
+CONSENT	null	거기 말고 가까운 데로 가	Nearest
+CONSENT	null	가까운데로 가	Nearest
+CONSENT	null	거기 가까운데 들르자	Unknown|Yes
+CONSENT	null	오 가까운데 가자	Unknown|Yes
+CONSENT	null	생각보다 가까운데 가자	Unknown|Yes
+CONSENT	null	거기 가까운데 그냥 가자	Unknown|Yes|No
+CONSENT	null	괜찮네 가자	Unknown|Yes
+CONSENT	null	별로 안 멀어 가자	Unknown|Yes
+CONSENT	null	괜찮아	No
+CONSENT	null	별로야	No
+CONSENT	null	조용히 좀 해	Stop
+CONSENT	null	그만 좀 물어봐	Stop
+CONSENT	null	아 그만	Stop
+CONSENT	null	취소 취소	Stop
+CONSENT	null	가 보자	Yes
+CONSENT	null	그래 가 보자	Yes
+CONSENT	null	응 그렇게 해 줘	Yes
+CONSENT	null	들르지 말자	No
+CONSENT	null	가지 말자	No
+FILL	false	삼만이요	Fill(m30000)
+FILL	false	3만이요	Fill(m30000)
+FILL	false	오천이요	Fill(m5000)
+FILL	false	만이요	Fill(m10000)
+FILL	false	3만만 넣어 줘	Fill(m30000)
+FILL	false	만이면 충분해	Fill(m10000)
+FILL	false	이만 됐어	Stop|Unknown
+FILL	false	이만 삼만 원	Fill(m30000)
+FILL	false	2 3만 원	Fill(m30000)
+FILL	false	2, 3만 원	Fill(m30000)
+FILL	false	삼만 삼만 원	Fill(m30000)
+FILL	false	이 만 원	Fill(m20000)
+FILL	false	이십 삼십 리터	Fill(q30)
+FILL	false	삼십 오 리터	Fill(q35)
+FILL	false	이십오 점 오 리터	Fill(q25.5)
+FILL	false	가득은 너무 많아	Unknown|Stop
+FILL	false	5만 원은 너무 많아	Unknown|Stop
+FILL	false	다음에 가득 넣을게	Stop
+FILL	false	아무거나 괜찮아	Fill(skip)
+FILL	false	충분히 넣어 줘	Unknown|Fill(full)
+FILL	false	조용히 좀 해	Stop
+FILL	true	완충까지는 필요 없어	Stop
+FILL	true	풀 충전은 안 해도 돼	Stop
+FILL	true	200킬로 탈 만큼 충전해 줘	Unknown
+FILL	true	100킬로 이상 갈 수 있게	Unknown
+FILL	true	150킬로 더 달릴 수 있게	Unknown
+FILL	true	서울까지 100킬로야	Unknown
+FILL	true	100킬로 정도만 가면 돼	Unknown
+FILL	true	40킬로	Fill(q40)
+FILL	true	40킬로 충전해 줘	Fill(q40)
+FILL	true	40킬로만	Fill(q40)
+FILL	true	사십 킬로와트시	Fill(q40)
+REFERENCE	null	본가는 싫어	Unknown
+REFERENCE	null	본가 빼고	Unknown
+REFERENCE	null	본가는 너무 멀어	Unknown
+REFERENCE	null	여기 아닌 데	Unknown
+REFERENCE	null	여기는 싫어	Unknown
+REFERENCE	null	여기면 됐어	Place(current)
+REFERENCE	null	지금 가는 곳 근처	Unknown
+REFERENCE	null	현재 목적지 근처	Unknown
+REFERENCE	null	회사 있는 데	Unknown
+REFERENCE	null	지금 집에 가는 중이야	Unknown
+REFERENCE	null	현재 위치 기준으로	Place(current)
+REFERENCE	null	지금 있는 곳	Place(current)
+REFERENCE	null	내 위치	Place(current)
+# Sums in pieces, amounts and places turned down, distances, corrections, place names that sound like numbers.
+FILL	false	3만 5천	Fill(m35000)
+FILL	false	1만 5천이요	Fill(m15000)
+FILL	false	3만 2천 정도만	Fill(m32000)
+FILL	false	3만 5 천	Fill(m35000)
+FILL	false	3만5천	Fill(m35000)
+FILL	false	만 5천	Fill(m15000)
+FILL	true	2만 5천이면 돼요	Fill(m25000)
+FILL	false	삼만 오천	Fill(m35000)
+FILL	false	가득은 못 넣어	Stop|Unknown
+FILL	false	가득 넣진 마	Stop|Unknown
+FILL	false	꽉 채우진 마	Stop|Unknown
+FILL	false	가득 채울 필요 없어	Stop|Unknown
+FILL	false	3만 원은 못 넣어	Stop|Unknown
+FILL	true	완충할 필요 없어	Stop|Unknown
+FILL	false	가득은 좀 많아	Stop|Unknown
+FILL	false	가득은 다음에 넣을게요	Stop|Unknown
+FILL	false	가득은 나중에 넣을게	Stop|Unknown
+FILL	false	다음엔 가득 넣을게	Stop|Unknown
+FILL	false	3만 원은 내일 넣을게	Stop|Unknown
+FILL	true	완충은 다음에 할게	Stop|Unknown
+REFERENCE	null	본가 쪽은 싫어	Unknown
+REFERENCE	null	본가 근처는 너무 멀어	Unknown
+REFERENCE	null	본가로는 안 돼	Unknown
+REFERENCE	null	여기서는 싫어	Unknown
+REFERENCE	null	여기 근처는 별로야	Unknown
+FILL	true	서울까지 100킬로	Unknown
+FILL	true	집까지 60킬로	Unknown
+FILL	true	주행거리 200킬로	Unknown
+FILL	true	100킬로 정도 운전해야 돼	Unknown
+FILL	true	50킬로 정도 가야 돼	Unknown
+CONSENT	null	나중에 말고 지금 갈게	Yes|Unknown
+CONSENT	null	다음에 말고 지금 가자	Yes|Unknown
+FILL	false	나중에 말고 지금 3만 원	Fill(m30000)
+FILL	false	다음에는 많이 넣고 오늘은 2만 원만	Fill(m20000)
+FILL	false	내일 멀리 가니까 가득	Fill(full)
+CONSENT	null	아 괜찮아	No
+CONSENT	null	전 괜찮아요	No
+CONSENT	null	아직 괜찮아	No
+CONSENT	null	괜찮아 괜찮아	No
+CONSENT	null	거기 별로야	No
+CONSENT	null	괜찮네 가자	Unknown|Yes
+FILL	false	가득 넣어 줘 아니다 가득은 됐어	Stop|Unknown
+FILL	false	3만 원 넣어 줘 아니 3만 원은 너무 많아	Stop|Unknown
+REFERENCE	null	여기서 찾아 아 여기는 싫어	Unknown
+REFERENCE	null	본가 근처로 해 줘 음 본가는 너무 멀어	Unknown
+FILL	false	만 땅	Fill(full)
+FILL	false	만 땅으로 넣어 줘	Fill(full)
+FILL	false	3만 원 만 넣어	Fill(m30000)
+FILL	false	40리터 만 넣어	Fill(q40)
+FILL	true	만 충	Fill(full)
+FILL	false	이천 가는 길에	Unknown
+FILL	false	사천 쪽으로	Unknown
+FILL	false	이천 휴게소에서 넣을게	Unknown
+FILL	false	이만 가자	Unknown|Stop
+FILL	false	리터당 2천 원이야	Unknown
+FILL	false	이십오 쩜 오 리터	Fill(q25.5)
+FILL	false	25 점 5 리터	Fill(q25.5)
+FILL	false	이십오 점 5리터	Fill(q25.5)
+FILL	true	20 점 5 킬로와트시	Fill(q20.5)
+FILL	false	3만 원 안 넘게	Fill(m30000)
+FILL	false	5만 원 안 넘게 넣어 줘	Fill(m50000)
+CONSENT	null	네 그렇게 해 주세요	Yes
+CONSENT	null	그렇게 해 주세요	Yes

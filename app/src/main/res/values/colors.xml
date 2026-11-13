@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same as Palette.DAY.background -->
+    <color name="zzan_background">#F3FAFC</color>
+</resources>

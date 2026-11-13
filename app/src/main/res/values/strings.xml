@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">짠드라이브</string>
+    <string name="shell_title">짠드라이브 · Pleos 연결 진단</string>
+    <string name="tts_sample">안녕, 나는 짠돌이야! 오늘도 아껴 보자.</string>
+</resources>

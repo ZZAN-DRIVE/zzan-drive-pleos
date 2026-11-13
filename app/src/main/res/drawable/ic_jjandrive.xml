@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <!-- Placeholder launcher icon: coin on dark background. -->
+    <path android:fillColor="#10161F" android:pathData="M0,0h48v48h-48z" />
+    <path android:fillColor="#F5C542" android:pathData="M24,8a16,16 0,1 1,0 32a16,16 0,1 1,0 -32z" />
+    <path android:fillColor="#C9971C" android:pathData="M24,13a11,11 0,1 1,0 22a11,11 0,1 1,0 -22z" />
+    <path android:fillColor="#F5C542" android:pathData="M22,17h4v14h-4z" />
+</vector>

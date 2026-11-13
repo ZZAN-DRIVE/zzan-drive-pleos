@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
+
+    <!-- Vehicle SDK: Fuel/EvBattery (CAR_ENERGY), Odometer/Gear (CAR_DRIVE), CarInfo (CAR_INFO). -->
+    <uses-permission android:name="pleos.car.permission.CAR_ENERGY" />
+    <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+    <uses-permission android:name="pleos.car.permission.CAR_INFO" />
+    <!-- NaviHelper: location/state (NAVI_ROUTE), requestRoute/addWaypoint (NAVI_ROUTE_SEARCH), requestNavigationScreen (NAVI_CUSTOM_MAP). -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
+    <uses-permission android:name="pleos.car.permission.NAVI_CUSTOM_MAP" />
+    <!-- Speech SDKs (ON_DEVICE mode only, no app registration). -->
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+    <!-- FusedLocation: dangerous protection level, requested at runtime. -->
+    <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
+
+    <application
+        android:name=".ZzanApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@drawable/ic_jjandrive"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- required=true fails to install on the Pleos 2.1.0 image (INSTALL_FAILED_MISSING_SHARED_LIBRARY). -->
+        <uses-library android:name="android.car" android:required="false" />
+        <!-- Product screen is parked-only: no distractionOptimized declaration, so the system blocks it while driving (R-33).
+             Window size changes (Pleos split windows, landscape/portrait) re-arrange the same views instead of recreating
+             the activity, so the character keeps playing; day/night (uiMode) still recreates it with the other palette. -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="unspecified"
+            android:theme="@style/Theme.Zzan">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- SDK diagnostics screen. Exported only in debug for scripts/verify-app.sh. -->
+        <activity
+            android:name=".diag.DiagnosticsActivity"
+            android:exported="${diagExported}"
+            android:label="짠드라이브 진단" />
+    </application>
+</manifest>

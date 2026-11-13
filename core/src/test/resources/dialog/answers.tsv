@@ -1,0 +1,359 @@
+# Spoken answers and what they must mean (adversarial corpus).
+# EXPECT<TAB>ELECTRIC(true|false|null)<TAB>TEXT<TAB>ALLOWED results separated by |. Saved place: parents = 본가.
+CONSENT	null	응	Yes
+CONSENT	null	응응	Yes
+CONSENT	null	네	Yes
+CONSENT	null	네 네	Yes
+CONSENT	null	예	Yes
+CONSENT	null	그래	Yes
+CONSENT	null	그래요	Yes
+CONSENT	null	좋아	Yes
+CONSENT	null	좋아요	Yes
+CONSENT	null	좋지	Yes
+CONSENT	null	오케이	Yes
+CONSENT	null	ok	Yes
+CONSENT	null	OK	Yes
+CONSENT	null	콜	Yes
+CONSENT	null	가자	Yes
+CONSENT	null	들를게	Yes
+CONSENT	null	들를게요	Yes
+CONSENT	null	응 들를게	Yes
+CONSENT	null	네 들를게요	Yes
+CONSENT	null	그래 가자	Yes
+CONSENT	null	좋아 가자	Yes
+CONSENT	null	응!	Yes
+CONSENT	null	네.	Yes
+CONSENT	null	좋아요~	Yes
+CONSENT	null	그래 그래	Yes
+CONSENT	null	웅	Yes
+CONSENT	null	ㅇㅇ	Yes
+CONSENT	null	오케이 가자	Yes
+CONSENT	null	그러자	Yes
+CONSENT	null	응 그래	Yes
+CONSENT	null	어 가자	Yes
+CONSENT	null	어	Yes|Unknown
+CONSENT	null	응 가	Yes
+CONSENT	null	가	Yes
+CONSENT	null	거기로 가	Yes
+CONSENT	null	거기로 가줘	Yes
+CONSENT	null	응 거기로 가자	Yes
+CONSENT	null	그래 가	Yes
+CONSENT	null	알았어	Yes
+CONSENT	null	알겠어 들를게	Yes
+CONSENT	null	그래 들러 줘	Yes
+CONSENT	null	들러 줘	Yes
+CONSENT	null	가요	Yes
+CONSENT	null	네 가 주세요	Yes
+CONSENT	null	들러 주세요	Yes
+CONSENT	null	좋습니다	Yes
+CONSENT	null	그렇게 해	Yes
+CONSENT	null	그렇게 하자	Yes
+CONSENT	null	당연하지	Yes
+CONSENT	null	가야지	Yes
+CONSENT	null	들러야지	Yes
+CONSENT	null	응 안내해 줘	Yes
+CONSENT	null	거기로 안내해 줘	Yes
+CONSENT	null	그럼 가자	Yes
+CONSENT	null	고고	Yes
+CONSENT	null	네 알겠습니다	Yes
+CONSENT	null	응 거기 들르자	Yes
+CONSENT	null	그만큼 아끼면 가야지	Yes|Unknown
+CONSENT	null	고민 그만하고 가자	Yes|Unknown
+CONSENT	null	그만큼 싸면 들를게	Yes|Unknown
+CONSENT	null	응?	Unknown|Why
+CONSENT	null	네?	Unknown|Why
+CONSENT	null	어?	Unknown|Why
+CONSENT	null	예?	Unknown|Why
+CONSENT	null	그래?	Unknown|Why
+CONSENT	null	그래요?	Unknown|Why
+CONSENT	null	어 그래?	Unknown|Why
+CONSENT	null	네? 네?	Unknown|Why
+CONSENT	null	좋아?	Unknown|Why
+CONSENT	null	응? 뭐라고	Unknown|Why
+CONSENT	null	어...	Unknown|Why
+CONSENT	null	어…	Unknown|Why
+CONSENT	null	음	Unknown|Why
+CONSENT	null	잠깐만	Unknown|Why
+CONSENT	null	뭐라고	Unknown|Why
+CONSENT	null	뭐라고?	Unknown|Why
+CONSENT	null	다시 말해줘	Unknown|Why
+CONSENT	null	어디야	Unknown|Why
+CONSENT	null	얼마나 걸려	Unknown|Why
+CONSENT	null	거기 비싸지 않아	Unknown|Why
+CONSENT	null	몇 킬로야	Unknown|Why
+CONSENT	null	거기 세차 돼	Unknown|Why
+CONSENT	null	생각 좀 해볼게	Unknown|Why
+CONSENT	null	글쎄	Unknown|Why
+CONSENT	null	모르겠어	Unknown|Why
+CONSENT	null	잠깐	Unknown|Why
+CONSENT	null	어 잠깐만	Unknown|Why
+CONSENT	null	응 근데 얼마나 걸려	Unknown|Why
+CONSENT	null	그래서 얼마 아끼는데	Unknown|Why
+CONSENT	null	좋긴 한데	Unknown|Why
+CONSENT	null	…	Unknown|Why
+CONSENT	null	어디라고?	Unknown|Why
+CONSENT	null	들를까?	Unknown|Why
+CONSENT	null	갈까?	Unknown|Why
+CONSENT	null	가자고?	Unknown|Why
+CONSENT	null	응...	Unknown|Yes
+CONSENT	null	좋은데 다음에	No|Unknown
+CONSENT	null	아니	No|Stop
+CONSENT	null	아니요	No|Stop
+CONSENT	null	싫어	No|Stop
+CONSENT	null	됐어	No|Stop
+CONSENT	null	됐어요	No|Stop
+CONSENT	null	괜찮아	No|Stop
+CONSENT	null	안 가	No|Stop
+CONSENT	null	안 들러	No|Stop
+CONSENT	null	안 들를래	No|Stop
+CONSENT	null	다음에	No|Stop
+CONSENT	null	나중에	No|Stop
+CONSENT	null	이따가	No|Stop
+CONSENT	null	패스	No|Stop
+CONSENT	null	그냥 갈게	No|Stop
+CONSENT	null	그냥 지나갈게	No|Stop
+CONSENT	null	지나갈래	No|Stop
+CONSENT	null	응 아니야	No|Stop
+CONSENT	null	아니 됐어	No|Stop
+CONSENT	null	오늘은 패스	No|Stop
+CONSENT	null	됐고 그냥 가	No|Stop
+CONSENT	null	아뇨	No|Stop
+CONSENT	null	아닙니다	No|Stop
+CONSENT	null	아녜요	No|Stop
+CONSENT	null	됐습니다	No|Stop
+CONSENT	null	괜찮습니다	No|Stop
+CONSENT	null	필요 없어	No|Stop
+CONSENT	null	노	No|Stop
+CONSENT	null	no	No|Stop
+CONSENT	null	안 돼	No|Stop
+CONSENT	null	별로야	No|Stop
+CONSENT	null	그냥 가	No|Stop
+CONSENT	null	그만	Stop|No
+CONSENT	null	취소	Stop|No
+CONSENT	null	조용히 해	Stop|No
+CONSENT	null	왜 거기야	Why
+CONSENT	null	왜?	Why
+CONSENT	null	이유가 뭐야	Why
+CONSENT	null	왜 거기로 가야 돼	Why
+CONSENT	null	왜요	Why
+CONSENT	null	거기 왜 가	Why|Unknown
+CONSENT	null	가까운 데로 가	Nearest
+CONSENT	null	그냥 가까운 데로 가	Nearest
+CONSENT	null	가까운 데로 가자	Nearest
+CONSENT	null	가까운 데로 가줘	Nearest
+CONSENT	null	가까운 곳으로 가	Nearest
+CONSENT	null	가까운 주유소로 가자	Nearest
+CONSENT	null	가까운 충전소로 안내해 줘	Nearest
+CONSENT	null	제일 가까운 데로 가	Nearest
+CONSENT	null	가까운 데로 가자니까	Nearest
+CONSENT	null	그냥 가까운 데 가	Nearest
+CONSENT	null	가까운 데로 가.	Nearest
+CONSENT	null	가까운 데로 가!	Nearest
+CONSENT	null	가까운 데로 가 주세요	Nearest
+CONSENT	null	가까운 데로 가요	Nearest
+CONSENT	null	아니 가까운 데로 가	Nearest
+CONSENT	null	거기 말고 가까운 데로 가	Nearest
+CONSENT	null	싫어 가까운 데로 가	Nearest
+CONSENT	null	가까운 곳에 들르자	Nearest
+CONSENT	null	아니 그냥 가까운 데로 가줘	Nearest
+CONSENT	null	가까운 데 말고	Unknown|No|Why
+CONSENT	null	가까운 데는 어디야	Unknown|No|Why
+CONSENT	null	가까운 데로 안 가	Unknown|No|Why
+CONSENT	null	가까운 데로 가면 얼마야	Unknown|No|Why
+CONSENT	null	가까운 데로 가자면 얼마나 걸려	Unknown|No|Why
+CONSENT	null	가까운 데로 가자 하면 몇 분 걸려	Unknown|No|Why
+CONSENT	null	가까운 데로 안내하지 마	Unknown|No|Why
+CONSENT	null	가까운 데로 안내 안 해도 돼	Unknown|No|Why
+CONSENT	null	가까운 데로 안내는 필요 없어	Unknown|No|Why
+CONSENT	null	가까운 데로 가자고 안 했어	Unknown|No|Why
+CONSENT	null	가까운 데로 가라는 거야	Unknown|No|Why
+CONSENT	null	가까운 데로 가 줄 수 있어	Unknown|No|Why
+CONSENT	null	가까운 데로 가자는 게 아니라	Unknown|No|Why
+CONSENT	null	가까운 데로 가지 마	Unknown|No|Why
+CONSENT	null	가까운 데 가면 뭐가 좋은데	Unknown|No|Why
+CONSENT	null	가까운 데로 갈래 아님 거기로 갈래	Unknown|No|Why
+CONSENT	null	가까운 데로 가라고 한 적 없어	Unknown|No|Why
+CONSENT	null	가까운 데로 가자 그러지 마	Unknown|No|Why
+CONSENT	null	가까운 데로 가는 거 아니지	Unknown|No|Why
+CONSENT	null	가까운 데로 안내해 주면 얼마나 걸려	Unknown|No|Why
+CONSENT	null	가까운 데로 가자고?	Unknown|No|Why
+CONSENT	null	가까운 데로 갈래?	Unknown|No|Why
+CONSENT	null	가까운 거 같은데 가자	Yes|Unknown
+FILL	false	가득	Fill(full)
+FILL	false	가득 넣어줘	Fill(full)
+FILL	false	꽉 채워	Fill(full)
+FILL	false	만땅	Fill(full)
+FILL	false	풀로	Fill(full)
+FILL	false	가득 채워 주세요	Fill(full)
+FILL	true	완충	Fill(full)|Unknown
+FILL	true	풀 충전	Fill(full)|Unknown
+FILL	true	풀충전 해줘	Fill(full)|Unknown
+FILL	true	끝까지 채워	Fill(full)|Unknown
+FILL	true	100%	Fill(full)|Unknown
+FILL	false	가득 아니고 3만 원	Fill(m30000)|Unknown
+FILL	false	가득 아니 삼만 원	Fill(m30000)|Unknown
+FILL	false	가득은 됐고 오만 원	Fill(m50000)|Unknown
+FILL	false	만땅은 너무 많고 이만 원	Fill(m20000)|Unknown
+FILL	false	가득은 비싸니까 3만 원만	Fill(m30000)|Unknown
+FILL	false	가득은 안 넣어도 돼	Stop|Unknown
+FILL	false	가득 넣지 마	Stop|Unknown
+FILL	true	완충 말고 가득 아니고 2만 원	Fill(m20000)|Unknown
+FILL	false	꽉은 말고 2만 원	Fill(m20000)
+FILL	false	가득 말고 3만 원어치	Fill(m30000)
+FILL	false	3만 원	Fill(m30000)
+FILL	false	삼만 원	Fill(m30000)
+FILL	false	3만원	Fill(m30000)
+FILL	false	30000원	Fill(m30000)
+FILL	false	30,000원	Fill(m30000)
+FILL	false	만 원	Fill(m10000)
+FILL	false	만원	Fill(m10000)
+FILL	false	만 오천 원	Fill(m15000)
+FILL	false	1만 5천 원	Fill(m15000)
+FILL	false	일만 오천 원	Fill(m15000)
+FILL	false	삼만 오천 원어치	Fill(m35000)
+FILL	false	3만 5천원	Fill(m35000)
+FILL	false	2만 5000원	Fill(m25000)
+FILL	false	오만 원	Fill(m50000)
+FILL	false	십만 원	Fill(m100000)
+FILL	false	십오만 원	Fill(m150000)
+FILL	false	오천 원	Fill(m5000)
+FILL	false	삼천 오백 원	Fill(m3500)
+FILL	false	칠만 원어치	Fill(m70000)
+FILL	false	이만 원만	Fill(m20000)
+FILL	false	만 원만 넣어줘	Fill(m10000)
+FILL	false	딱 만 원	Fill(m10000)
+FILL	false	한 삼만 원	Fill(m30000)
+FILL	false	대충 오만 원 정도	Fill(m50000)
+FILL	false	삼만 원 아니 사만 원	Fill(m40000)
+FILL	false	삼만 원 말고 이만 원	Fill(m20000)
+FILL	false	만 원 정도	Fill(m10000)
+FILL	false	오만원 이하로	Fill(m50000)
+FILL	false	4만 원어치만	Fill(m40000)
+FILL	false	사만 원	Fill(m40000)
+FILL	false	구만 원	Fill(m90000)
+FILL	false	이십만 원	Fill(m200000)
+FILL	false	5만 원 넣어 주세요	Fill(m50000)
+FILL	false	3만 원어치 넣어 주세요	Fill(m30000)
+FILL	false	만 오천 원 아니 이만 원	Fill(m20000)
+FILL	false	이만 원이요	Fill(m20000)
+FILL	false	오늘은 만 원만	Fill(m10000)
+FILL	false	일단 오만 원	Fill(m50000)
+FILL	false	3만 원이면 몇 리터야	Fill(m30000)
+FILL	false	육만 칠천 오백 원	Fill(m67500)
+FILL	false	이만이천원	Fill(m22000)
+FILL	false	만 이천 원	Fill(m12000)
+FILL	false	원래 오만 원 넣어	Fill(m50000)
+FILL	false	3만	Fill(m30000)|Unknown
+FILL	false	삼만 정도	Fill(m30000)|Unknown
+FILL	false	오만 어치	Fill(m50000)|Unknown
+FILL	false	이만 오천	Fill(m25000)|Unknown
+FILL	false	만 오천 정도만	Fill(m15000)|Unknown
+FILL	false	조금만 만 원어치	Fill(m10000)|Unknown|Stop
+FILL	false	돈이 만 원밖에 없어	Fill(m10000)|Unknown|Stop
+FILL	false	기름이 십만 원어치 필요해	Fill(m100000)|Unknown|Stop
+FILL	false	현금이 오만 원 있어	Fill(m50000)|Unknown|Stop
+FILL	false	이것만 만 원	Fill(m10000)|Unknown|Stop
+FILL	false	내일 만 원	Fill(m10000)|Unknown|Stop
+FILL	false	많이 말고 조금만, 만 원	Fill(m10000)|Unknown|Stop
+FILL	false	카드 한도가 만 원	Fill(m10000)|Unknown|Stop
+FILL	false	딱 그만큼만 만 원	Fill(m10000)|Unknown|Stop
+FILL	false	1.5만 원	Fill(m15000)|Unknown
+FILL	false	2.5만 원	Fill(m25000)|Unknown
+FILL	false	3.5만원	Fill(m35000)|Unknown
+FILL	false	백만 원	Unknown
+FILL	false	오백 원	Unknown
+FILL	false	천 원	Fill(m1000)|Unknown
+FILL	false	이삼만 원	Fill(m20000)|Fill(m30000)|Unknown
+FILL	false	30리터	Fill(q30)
+FILL	false	삼십 리터	Fill(q30)
+FILL	false	30L	Fill(q30)
+FILL	false	30 리터	Fill(q30)
+FILL	false	20리터만	Fill(q20)
+FILL	false	이십리터	Fill(q20)
+FILL	false	30L요	Fill(q30)
+FILL	false	25.5리터	Fill(q25.5)
+FILL	false	20리터 말고 30리터	Fill(q30)
+FILL	false	오십 리터	Fill(q50)
+FILL	false	40리터 정도	Fill(q40)
+FILL	false	20l이요	Fill(q20)|Unknown
+FILL	false	20리터 아니 30리터	Fill(q30)|Unknown
+FILL	false	이십 리터 아니다 삼십 리터	Fill(q30)|Unknown
+FILL	false	삼십 리터 아니 사십 리터요	Fill(q40)|Unknown
+FILL	false	3만 원 아니 30리터	Fill(q30)|Unknown
+FILL	false	20리터 아니 가득	Fill(full)|Unknown
+FILL	true	30킬로와트시 아니 40킬로와트시	Fill(q40)|Unknown
+FILL	true	20리터 아니 20킬로와트시	Fill(q20)|Unknown
+FILL	false	삼십 오 리터	Fill(q35)|Unknown
+FILL	false	이십 오 리터	Fill(q25)|Unknown
+FILL	true	사십 오 킬로와트시	Fill(q45)|Unknown
+FILL	true	40킬로와트시	Fill(q40)
+FILL	true	40kWh	Fill(q40)
+FILL	true	사십 킬로와트시	Fill(q40)
+FILL	true	40킬로	Fill(q40)
+FILL	true	30 kwh	Fill(q30)
+FILL	true	40키로와트	Fill(q40)
+FILL	true	이십 킬로와트시만	Fill(q20)
+FILL	true	100킬로 갈 만큼	Unknown
+FILL	true	200킬로 정도 달릴 만큼	Unknown
+FILL	true	집까지 30킬로 남았어	Unknown
+FILL	true	20리터	Unknown
+FILL	false	40킬로와트시	Unknown
+FILL	false	50킬로	Unknown
+FILL	false	다음에	Stop
+FILL	false	됐어	Stop
+FILL	false	나중에 넣을게	Stop
+FILL	false	안 넣어	Stop
+FILL	false	싫어	Stop
+FILL	false	패스	Stop
+FILL	false	아니	Stop
+FILL	false	아니요	Stop
+FILL	false	그만	Stop
+FILL	false	취소	Stop
+FILL	false	몰라	Fill(skip)
+FILL	false	아무거나	Fill(skip)
+FILL	false	상관없어	Fill(skip)
+FILL	false	그냥	Fill(skip)
+FILL	false	건너뛰기	Fill(skip)
+FILL	false	그냥 가까운 데	Fill(skip)
+FILL	false	알아서 해	Fill(skip)|Unknown
+FILL	false	모르겠어	Fill(skip)|Unknown
+FILL	false	적당히	Fill(skip)|Unknown
+FILL	false	글쎄	Fill(skip)|Unknown
+FILL	false	음	Unknown
+FILL	false	얼마나 넣어야 돼	Unknown
+FILL	false	리터당 얼마야	Unknown
+FILL	false	반만	Unknown
+FILL	false	절반	Unknown
+FILL	false	가득 넣으면 얼마야	Fill(full)|Unknown
+REFERENCE	null	여기	Place(current)
+REFERENCE	null	여기서	Place(current)
+REFERENCE	null	현재 위치	Place(current)
+REFERENCE	null	지금 위치	Place(current)
+REFERENCE	null	이 근처	Place(current)
+REFERENCE	null	여기서 찾아줘	Place(current)
+REFERENCE	null	응	Place(current)
+REFERENCE	null	본가	Place(parents)
+REFERENCE	null	본가 근처로	Place(parents)
+REFERENCE	null	본가 쪽	Place(parents)
+REFERENCE	null	여기 말고 본가	Place(parents)
+REFERENCE	null	현재 위치 말고 본가 근처	Place(parents)
+REFERENCE	null	본가 가는 길에	Place(parents)
+REFERENCE	null	본가 말고 여기	Place(current)|Unknown
+REFERENCE	null	본가 말고 지금 위치	Place(current)|Unknown
+REFERENCE	null	본가 아니고 현재 위치로	Place(current)|Unknown
+REFERENCE	null	본가 쪽은 아니고 이 근처	Place(current)|Unknown
+REFERENCE	null	본가 말고 여기 근처로	Place(current)|Unknown
+REFERENCE	null	여기 말고	Unknown|Stop
+REFERENCE	null	여기 아니야	Unknown|Stop
+REFERENCE	null	지금은 됐어	Unknown|Stop
+REFERENCE	null	지금 말고 이따가	Unknown|Stop
+REFERENCE	null	현재 위치 말고	Unknown|Stop
+REFERENCE	null	네?	Unknown|Stop
+REFERENCE	null	아니	Unknown|Stop
+REFERENCE	null	집 근처	Unknown|Stop
+REFERENCE	null	회사	Unknown|Stop
+REFERENCE	null	음	Unknown|Stop
+REFERENCE	null	엄마네	Unknown|Stop
+REFERENCE	null	본가 말고	Unknown|Stop
+REFERENCE	null	그만	Stop
+REFERENCE	null	본 가	Place(parents)|Unknown

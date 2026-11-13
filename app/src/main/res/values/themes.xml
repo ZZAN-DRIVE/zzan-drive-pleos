@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Product screen. Day/night follows the system (Pleos design guide); the screen draws its own colors (ui/Palette.kt).
+         The window background matches so there is no flash of another color while the app starts. -->
+    <style name="Theme.Zzan" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/zzan_background</item>
+    </style>
+</resources>

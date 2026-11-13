@@ -1,12 +1,22 @@
 # core
 
-차량·SDK·화면에 의존하지 않는 핵심 로직. spec.md 4장의 계층 구조를 따른다.
+차량·SDK·화면에 의존하지 않는 핵심 로직이다. spec.md 4장의 계층 구조를 따른다. 순수 Kotlin(JVM) 모듈이라 에뮬레이터 없이 몇 초 안에 테스트가 끝난다.
 
-| 폴더 | 책임 | spec 참조 |
+```bash
+./gradlew :core:test      # spec.md 6·7장 테스트 벡터
+```
+
+| 패키지 | 책임 | spec 참조 |
 | --- | --- | --- |
-| `domain/` | 모델, 단위, `CostCalculator`(실질 주유·충전 비용, 경로 총비용), `CharacterProgress`(레벨 상태 머신), 레벨표 설정 | F02~F04, F06, 7장 |
-| `settlement/` | 정산 원장, 확정 절약·확정 차감, 월간 손익, 중복 방지 | F08, 8장 |
-| `verification/` | 주유·충전 감지, 경로 완주 확인, 비효율 주행 감지 | F02~F04, F07 |
+| `domain` | `CostCalculator`(실질 주유·충전 비용, 경로 운행비, 시간가치 비교값), `Recommender`(후보 비교, 추천 시점 스냅샷), `Plan.kt`의 규칙(`TriggerPolicy` 알림 기준 %, `FillPolicy` 넣을 양, `CandidatePolicy` 도로 5 km, `Reachability` 목적지 분기, `CompareMode`·`CreditRule` 비교 방식과 적립 기준), `RoutePlanner`(출발 전 경로 비교), `LevelTable`·`CharacterProgress`(레벨 상태 머신), `CelebrationPolicy`(정차 중에만 연출), `PlanReference`(조사값·시연 가정) | F02~F04, F06, 7장, D-22~D-27, D-29~D-31 |
+| `dialog` | `StationDialog`(질문 순서: 기준 위치 → 넣을 양 → 추천. 순수 상태 기계), `AnswerParser`(음성 답 해석. 동의는 답 전체가 동의 표현일 때만), `FillChoices`(넣을 양 칩과 debug 명령 id) | F05, D-23, D-25 |
+| `settlement` | `LedgerEvent`(JSONL로 저장하는 정산 이벤트), `Ledger`(멱등 키·월간 손익·짠포인트), `SettlementPolicy`(승인·장소·12시간 조건, 실질비용 차이로 확정), `OpportunityCost`(기회비용 금액) | F08, 8장, D-02, D-21, D-28, D-29 |
+| `verification` | `RefillDetector`(충전·주유 감지 상태기계), `StationMatcher`(300 m), `PassDetector`(추천 장소를 들르지 않고 지나침: 300 m 안 → 500 m 밖), `InefficiencyRules`(3-5 판정·비용) | F02~F04, F07, D-05, D-28 |
+| `voice` | `WonFormat`(화면은 1원, 음성은 반올림 규칙), `VoiceLines`(짠돌이·짠순이 문구) | F05, D-12 |
+| `motion` | `CharacterClips`(파일 이름으로 클립 역할을 정하고, 레벨·레벨업·탭·정산 반응에 맞는 클립을 고른다) | 7.1, D-18 |
 
-규칙: `core`는 `data`의 **인터페이스(`source-api`)** 에만 의존하고, Pleos SDK·Android API를 직접 부르지 않는다.
-이렇게 두어야 에뮬레이터 없이 단위 테스트(spec 6·7장 테스트 벡터)를 돌릴 수 있다.
+규칙:
+
+- `core`는 `data`의 **인터페이스(`:data:source-api`)** 에만 의존하고, Pleos SDK·Android API를 직접 부르지 않는다. 이렇게 두어야 에뮬레이터 없이 단위 테스트를 돌릴 수 있다.
+- 금액은 `BigDecimal`로 계산하고 확정할 때 한 번만 원 단위로 반올림한다.
+- 모든 값에는 출처(`DataOrigin`: 차량 실측, 시연 데이터, 조사값 등)가 붙는다. 화면은 이 출처를 그대로 보여준다.
