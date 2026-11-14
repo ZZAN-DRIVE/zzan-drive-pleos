@@ -82,12 +82,12 @@ import kotlin.math.roundToLong
  * It only draws [UiState] and forwards taps; all logic lives in [ZzanController].
  *
  * Made to be glanced at, not read: numbers, rings and one character; sentences are kept for decisions. A
- * page-navigation bar on top (what data the screen runs on, the car's state as icons, [시연], [설정]; no title and
- * no logo: the bar stays quiet) and two columns under it. Left, on the driver's side: the date, the amount saved so far, the character with its level,
+ * page-navigation bar on top (what data the screen runs on, the car's state as icons, [사용법], [시연], [설정]; no
+ * title and no logo: the bar stays quiet) and two columns under it. Left, on the driver's side: the date, the amount saved so far, the character with its level,
  * and the one primary action. Right: what the character just said, then either the dashboard (a level-up when there
- * is one, three rings, and under them how it works or the last trip) or one decision card (a question, a comparison,
- * the routes).
- * The long explanations (formulas, sources) are one tap away behind (i).
+ * is one, three rings that take the room when they stand alone, and under them the last trip) or one decision card
+ * (a question, a comparison, the routes).
+ * The long explanations (formulas, sources) are one tap away behind (i), and how the app works behind [사용법].
  *
  * Glass on a soft backdrop of the CI colours (ui/Palette.kt, ui/Glass.kt, ui/Ambient.kt); sizes and type follow the
  * Pleos Connect design guide (ui/Pleos.kt) and day/night. In a narrow (single) window the same views stack.
@@ -155,8 +155,14 @@ class MainActivity : Activity() {
     private lateinit var tripCard: Card
     private var renderedTrip: TripUi? = null
     private var tripDonut: RingView? = null
-    private lateinit var guidePanel: LinearLayout
+    private lateinit var topBar: LinearLayout
+    private lateinit var guideButton: Button
+    private lateinit var demoButton: Button
+    private lateinit var guidePopup: Popup
     private lateinit var guideAlert: TextView
+    private var renderedGuide: String? = null
+    private var ringColumnDp = 0
+    private var ringsCompact: Boolean? = null
     private lateinit var dashboard: LinearLayout
     private lateinit var batteryTitle: TextView
     private lateinit var batteryRing: RingView
@@ -166,6 +172,7 @@ class MainActivity : Activity() {
     private lateinit var levelRing: RingView
     private lateinit var levelCaption: TextView
     private var rings: List<RingView> = emptyList()
+    private var ringTitles: List<TextView> = emptyList()
 
     private lateinit var personaPopup: Popup
     private lateinit var locationPopup: Popup
@@ -347,9 +354,10 @@ class MainActivity : Activity() {
                 i.getStringExtra(EXTRA_PERSONA)?.let { p -> Persona.entries.firstOrNull { it.name.equals(p, ignoreCase = true) } },
                 i.getIntExtra(EXTRA_PERCENT, 0),
             )
-            // Popups for checks and screenshots: popup --es zzan.arg settings|demos|notices|reset|persona|close.
+            // Popups for checks and screenshots: popup --es zzan.arg settings|demos|guide|notices|reset|persona|close.
             "popup" -> when (i.getStringExtra(EXTRA_ARG)) {
                 "settings" -> settingsPopup.show()
+                "guide" -> guidePopup.show()
                 "demos" -> demoPopup.show()
                 "notices" -> noticePopup.show()
                 "reset" -> resetPopup.show()
@@ -477,11 +485,17 @@ class MainActivity : Activity() {
         levelPill.text = "Lv.$charLevel ${progress.food(charLevel)}"
         artNote.visibility = if (stage.borrowed && wide) View.VISIBLE else View.GONE
 
-        // One card at a time: a question, a decision, the routes; otherwise the dashboard with the level-up, the last
-        // trip, or how the app works.
+        // One card at a time: a question, a decision, the routes; otherwise the dashboard with the level-up and the
+        // last trip. With no trip to show, the rings take the room.
         val decision = renderAsk(s) || renderRecommendation(s, unit) || renderRoutes(s)
         val tripShown = renderTrip(s, decision)
-        renderGuide(s, !decision && !tripShown && celebration.visibility != View.VISIBLE)
+        // The trip card is hidden behind a decision and comes back after it: the rings keep their size meanwhile.
+        sizeRings(compact = s.trip?.let { it.penalty.fullWon > 0 } == true)
+        val alertLine = "${if (s.energyType.isElectric) "배터리" else "연료"}가 ${s.threshold}% 아래로 내려가면 먼저 물어봐요"
+        if (alertLine != renderedGuide) {
+            renderedGuide = alertLine
+            guideAlert.setKorean(alertLine)
+        }
         idleStack.visibility = if (decision) View.GONE else View.VISIBLE
         renderDashboard(s)
         renderChips(s)
@@ -1011,10 +1025,24 @@ class MainActivity : Activity() {
         return true
     }
 
-    /** With nothing else to show: how the app saves money, as three pictures with a word each. */
-    private fun renderGuide(s: UiState, show: Boolean) {
-        guidePanel.visibility = if (show) View.VISIBLE else View.GONE
-        guideAlert.text = "${s.threshold}% 아래"
+    /**
+     * The rings' size. Alone on the panel they are as large as a third of it allows; with the last trip under them they
+     * step back, so both fit on the screen.
+     */
+    private fun sizeRings(compact: Boolean) {
+        if (compact == ringsCompact) return
+        ringsCompact = compact
+        val design = if (wide) (if (compact) 232 else 288) else (if (compact) 196 else 232)
+        val size = minOf(design, ringColumnDp - 8).coerceAtLeast(120)
+        // The number in the middle and the title above grow with the ring (the number still shrinks to fit a long value).
+        val large = size >= 272
+        val gap = dp(if (large) 12 else 6)
+        rings.forEach { it.layoutParams = LinearLayout.LayoutParams(dp(size), dp(size)).apply { setMargins(0, gap, 0, gap) } }
+        ringTitles.forEach { it.applyType(if (large) Type.BODY2_STRONG else Type.LABEL1_STRONG) }
+        batteryRing.valueSp = if (large) 56f else 44f
+        levelRing.valueSp = if (large) 56f else 44f
+        monthRing.valueSp = if (large) 48f else 38f
+        rings.forEach { it.invalidate() }
     }
 
     private fun duration(minutes: Int): String =
@@ -1131,17 +1159,38 @@ class MainActivity : Activity() {
         val large = glassPad(Depth.LARGE)
         val cardPad = dp(if (wide) 32 else 24) + large
         listOf(askCard, recCard, routeCard, tripCard).forEach { it.root.setPadding(cardPad, cardPad, cardPad, cardPad) }
-        listOf(celebration, guidePanel).forEach { it.setPadding(cardPad, cardPad, cardPad, cardPad) }
+        celebration.setPadding(cardPad, cardPad, cardPad, cardPad)
         val dashPad = dp(if (wide) 28 else 20) + large
         dashboard.setPadding(dashPad, dashPad, dashPad, dashPad)
         // Three rings side by side: as large as the design asks, never wider than a third of the panel.
         val leftWidth = (widthDp * 0.38f).roundToInt().coerceIn(520, 640)
         val panel = if (wide) widthDp - 2 * 32 - leftWidth - 32 else widthDp - 2 * 24 + 8
-        val column = (panel - 2 * (if (wide) 28 else 20)) / 3
-        val ring = dp(minOf(if (wide) 232 else 196, column - 8).coerceAtLeast(120))
-        rings.forEach { it.layoutParams = LinearLayout.LayoutParams(ring, ring).apply { setMargins(0, dp(6), 0, dp(6)) } }
+        ringColumnDp = (panel - 2 * (if (wide) 28 else 20)) / 3
+        val compact = ringsCompact ?: false
+        ringsCompact = null
+        sizeRings(compact)
         val chip = dp(if (wide) 52 else 44)
         listOf(stateChip, micChip, locChip).forEach { it.layoutParams = (it.layoutParams as LinearLayout.LayoutParams).apply { height = chip } }
+        // [사용법] sits with [시연] and [설정] in the wide window. In the narrow one a third button beside them would
+        // reach into the window handle (top-centre 320×60, nothing to tap there), so it goes first, on the left.
+        val small = glassPad(Depth.SMALL)
+        topBar.removeView(guideButton)
+        if (wide) {
+            topBar.addView(
+                guideButton, topBar.indexOfChild(demoButton),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(16) - small },
+            )
+        } else {
+            topBar.addView(
+                guideButton, 0,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = -small
+                    marginEnd = dp(12) - small
+                },
+            )
+        }
+        // The buttons share their shadow room: 20 dp between two visible shapes, 16 dp after the chips.
+        demoButton.layoutParams = (demoButton.layoutParams as LinearLayout.LayoutParams).apply { marginStart = if (wide) dp(20) - 2 * small else dp(16) - small }
         // In the wide window whatever is on the right sits in the middle of its column; in the narrow one it starts at the top.
         val inSlot = if (wide) Gravity.CENTER_VERTICAL else Gravity.TOP
         listOf(askCard.root, recCard.root, routeCard.root, idleScroll).forEach {
@@ -1251,7 +1300,7 @@ class MainActivity : Activity() {
         }
 
         // ---- Page navigation bar. The top-centre 320×60 of the window belongs to the window handle: nothing to tap there.
-        val topBar = LinearLayout(this).apply {
+        topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
@@ -1261,8 +1310,14 @@ class MainActivity : Activity() {
             setBounds(0, 0, dp(12), dp(12))
         }
         marker = chip().apply { setCompoundDrawablesRelative(markerDot, null, null, null) }
-        topBar.addView(marker, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
-        topBar.addView(Space(this), LinearLayout.LayoutParams(0, 1, 1f))
+        // The marker takes the room the buttons and chips leave: in a narrow window it shortens with "…" instead of
+        // pushing a button out of the bar.
+        topBar.addView(
+            FrameLayout(this).apply {
+                addView(marker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44), Gravity.CENTER_VERTICAL or Gravity.START))
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
         // The car's state, shown and not tapped: flat pills, icons before words.
         stateChip = chip()
         micChip = chip().apply { compoundDrawablePadding = 0 }
@@ -1279,11 +1334,17 @@ class MainActivity : Activity() {
             chipRow.addView(c, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)).apply { if (i > 0) marginStart = dp(8) })
         }
         topBar.addView(chipRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // How the app works, one tap away. applyLayout places it: with [시연] and [설정], or first on the left.
+        guideButton = button("사용법", Kind.SECONDARY, BtnSize.S) {
+            guidePopup.show()
+            lastState?.let(::render)
+        }
+        demoButton = button("시연", Kind.SECONDARY, BtnSize.S) {
+            demoPopup.show()
+            lastState?.let(::render)
+        }
         topBar.addView(
-            button("시연", Kind.SECONDARY, BtnSize.S) {
-                demoPopup.show()
-                lastState?.let(::render)
-            },
+            demoButton,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(16) - glassPad(Depth.SMALL) },
         )
         topBar.addView(
@@ -1405,7 +1466,7 @@ class MainActivity : Activity() {
         routeCard.footer.addView(button("확인", Kind.PRIMARY) { controller?.closeRoutes() }, LinearLayout.LayoutParams(dp(240), ViewGroup.LayoutParams.WRAP_CONTENT))
         askCard.footer.visibility = View.GONE
 
-        // With no decision open: the level-up, the dashboard, then the last trip or how the app works.
+        // With no decision open: the level-up, the dashboard, then the last trip.
         idleStack = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
@@ -1462,64 +1523,16 @@ class MainActivity : Activity() {
         rings = listOf(batteryRing, monthRing, levelRing)
         // Each ring's description already says what the line under it shows: a screen reader hears it once.
         listOf(batteryCaption, monthLegend, levelCaption).forEach { it.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+        val monthTitle = label(Type.LABEL1_STRONG, palette.text2, center = true).apply { text = "이번 달" }
+        val levelTitle = label(Type.LABEL1_STRONG, palette.text2, center = true).apply { text = "다음 레벨" }
+        ringTitles = listOf(batteryTitle, monthTitle, levelTitle)
         ringColumn(batteryTitle, batteryRing, batteryCaption)
-        ringColumn(label(Type.LABEL1_STRONG, palette.text2, center = true).apply { text = "이번 달" }, monthRing, monthLegend)
-        ringColumn(label(Type.LABEL1_STRONG, palette.text2, center = true).apply { text = "다음 레벨" }, levelRing, levelCaption)
+        ringColumn(monthTitle, monthRing, monthLegend)
+        ringColumn(levelTitle, levelRing, levelCaption)
         idleStack.addView(dashboard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         tripCard = card()
         tripCard.footer.visibility = View.GONE
         idleStack.addView(tripCard.root, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        // How the app works: three pictures, a word and a few more under each.
-        guidePanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = glass(Depth.LARGE)
-            visibility = View.GONE
-        }
-        guidePanel.addView(label(Type.LABEL1_STRONG, palette.text2).apply { text = "이렇게 아껴요" })
-        val steps = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        fun step(icon: Icon, word: String, more: String): TextView {
-            val column = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-            }
-            column.addView(
-                ImageView(this).apply {
-                    scaleType = ImageView.ScaleType.CENTER
-                    setImageDrawable(IconDrawable(icon, palette.accent, dp(40)))
-                    background = glass(depth = null, corner = 999f)
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                },
-                LinearLayout.LayoutParams(dp(88), dp(88)),
-            )
-            column.addView(
-                label(Type.BODY2_STRONG, center = true).apply { text = word },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) },
-            )
-            val line = label(Type.LABEL1, palette.text2, center = true).apply { text = more }
-            column.addView(line)
-            steps.addView(column, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            return line
-        }
-        fun arrow() {
-            steps.addView(
-                ImageView(this).apply {
-                    setImageDrawable(IconDrawable(Icon.CHEVRON, palette.text3, dp(32)))
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                },
-                LinearLayout.LayoutParams(dp(32), dp(32)),
-            )
-        }
-        guideAlert = step(Icon.BELL, "알림", "")
-        arrow()
-        step(Icon.BARS, "비교", "가는 비용까지")
-        arrow()
-        step(Icon.CHECK, "적립", "차가 확인")
-        guidePanel.addView(steps, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
-        idleStack.addView(guidePanel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         listOf(askCard, recCard, routeCard).forEach { slot.addView(it.root) }
         // When the cards are taller than the room (a narrow window), the bottom edge fades to say there is more below.
@@ -1658,6 +1671,41 @@ class MainActivity : Activity() {
         }
         resetPopup.action("취소", Kind.SECONDARY) {
             resetPopup.hide()
+            lastState?.let(::render)
+        }
+
+        // How the app works ([사용법]): three steps, each a picture, a word and one line.
+        guidePopup = popup(Pleos.POPUP_MEDIUM, "이렇게 아껴요")
+        fun step(icon: Icon, word: String, line: String): TextView {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(
+                ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER
+                    setImageDrawable(IconDrawable(icon, palette.accent, dp(40)))
+                    background = glass(depth = null, corner = 999f, fill = palette.glassTint)
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                },
+                LinearLayout.LayoutParams(dp(88), dp(88)),
+            )
+            val words = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            words.addView(label(Type.BODY2_STRONG).apply { text = word })
+            val more = label(Type.BODY3, palette.text2, maxLines = 2).apply { setKorean(line) }
+            words.addView(more, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+            row.addView(words, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(24) })
+            guidePopup.content.addView(
+                row,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (guidePopup.content.childCount > 0) topMargin = dp(24) },
+            )
+            return more
+        }
+        guideAlert = step(Icon.BELL, "알림", "")
+        step(Icon.BARS, "비교", "가는 비용까지 더해 가장 이득인 곳을 골라요")
+        step(Icon.CHECK, "적립", "차가 넣은 양을 확인하면 절약액이 쌓여요")
+        guidePopup.action("닫기", Kind.SECONDARY) {
+            guidePopup.hide()
             lastState?.let(::render)
         }
 
