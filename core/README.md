@@ -13,7 +13,7 @@
 | `settlement` | `LedgerEvent`(JSONL로 저장하는 정산 이벤트), `Ledger`(멱등 키·월간 손익·짠포인트), `SettlementPolicy`(승인·장소·12시간 조건, 실질비용 차이로 확정), `OpportunityCost`(기회비용 금액) | F08, 8장, D-02, D-21, D-28, D-29 |
 | `verification` | `RefillDetector`(충전·주유 감지 상태기계), `StationMatcher`(300 m), `PassDetector`(추천 장소를 들르지 않고 지나침: 300 m 안 → 500 m 밖), `InefficiencyRules`(3-5 판정·비용, 급가속 건당·과속 비용), `DrivingMonitor`(속도·기어·엔진 표본을 주행 단위의 차감 내역으로) | F02~F04, F07, D-05, D-28, D-35~D-38 |
 | `voice` | `WonFormat`(화면은 1원, 음성은 반올림 규칙), `VoiceLines`(짠돌이·짠순이 문구) | F05, D-12 |
-| `motion` | `CharacterClips`(파일 이름으로 클립 역할을 정하고, 레벨·레벨업·탭·정산 반응에 맞는 클립을 고른다) | 7.1, D-18 |
+| `motion` | `CharacterClips`(파일 이름으로 클립 역할과 그려진 번개 단계를 정하고, 레벨·레벨업·탭·정산 반응에 맞는 클립을 고른다), `BoltGauge`(머리 위 번개가 벗어나지 않는 상자와 레벨별 채움선. 디자이너 파일에서 잰 값) | 7.1, D-18, D-40 |
 
 규칙:
 
