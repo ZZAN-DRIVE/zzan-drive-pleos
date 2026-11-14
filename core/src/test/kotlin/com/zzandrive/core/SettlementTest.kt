@@ -8,6 +8,7 @@ import com.zzandrive.core.domain.toWon
 import com.zzandrive.core.settlement.Ledger
 import com.zzandrive.core.settlement.LedgerCodec
 import com.zzandrive.core.settlement.OpeningBalance
+import com.zzandrive.core.settlement.OpportunityCostConfirmed
 import com.zzandrive.core.settlement.PenaltyConfirmed
 import com.zzandrive.core.settlement.RecommendationDecided
 import com.zzandrive.core.settlement.RecommendationIssued
@@ -96,5 +97,25 @@ class SettlementTest {
         assertEquals(2000L, ledger.monthlyNet(YearMonth.of(2026, 12)))
         assertEquals(-1500L, ledger.monthlyNet(YearMonth.of(2026, 11)))
         assertEquals(200L, ledger.points(YearMonth.of(2026, 12), BigDecimal("0.1")))
+    }
+
+    @Test
+    fun `month ring - the saved and the deducted side add up to the monthly net, by Korean month`() {
+        val ledger = Ledger()
+        val nov = YearMonth.of(2026, 11)
+        val dec = YearMonth.of(2026, 12)
+        fun at(iso: String) = Instant.parse(iso).toEpochMilli()
+        ledger.append(OpeningBalance("seed", at("2026-11-01T00:00:00Z"), level = 2, accrualWon = 3000)) // not a saving
+        ledger.append(SavingConfirmed("r1", "d1", at("2026-11-10T03:00:00Z"), 2323, "2323"))
+        ledger.append(PenaltyConfirmed("trip-1", at("2026-11-12T03:00:00Z"), 377))
+        ledger.append(OpportunityCostConfirmed("r2", at("2026-11-13T03:00:00Z"), 77))
+        // 2026-11-30T15:30Z is already 2026-12-01 in Korea.
+        ledger.append(SavingConfirmed("r3", "d3", at("2026-11-30T15:30:00Z"), 676, "676"))
+        assertEquals(2323L, ledger.monthlySaved(nov))
+        assertEquals(377L + 77L, ledger.monthlyDeducted(nov)) // in full, whatever the level could absorb
+        assertEquals(ledger.monthlyNet(nov), ledger.monthlySaved(nov) - ledger.monthlyDeducted(nov))
+        assertEquals(676L, ledger.monthlySaved(dec))
+        assertEquals(0L, ledger.monthlyDeducted(dec))
+        assertEquals(ledger.monthlyNet(dec), ledger.monthlySaved(dec) - ledger.monthlyDeducted(dec))
     }
 }

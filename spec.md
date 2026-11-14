@@ -535,6 +535,8 @@ pointsAccrued = monthlyNet > 0 ? monthlyNet × ratio : 0
 
 월 경계는 한국 시간(Asia/Seoul) 기준이다. 적립 비율과 마이너스 월의 이월 여부는 D-06 (기획서: 마이너스면 그달 적립은 0원).
 
+화면의 "이번 달 손익" 도넛은 위 식의 두 쪽을 나눠 보여 준다. 아낀 쪽(`monthlySaved`)은 Σ SavingConfirmed.amount이고, 빠진 쪽(`monthlyDeducted`)은 Σ PenaltyConfirmed.fullAmount + Σ OpportunityCostConfirmed.amount이다. 따라서 아낀 쪽 − 빠진 쪽 = monthlyNet이다. 빠진 쪽은 레벨이 흡수한 금액이 아니라 전액이다.
+
 ---
 
 ## 9. 외부 연동

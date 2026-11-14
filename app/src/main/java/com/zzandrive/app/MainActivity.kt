@@ -7,11 +7,9 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
-import android.graphics.Color
 import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.Build
@@ -44,6 +42,10 @@ import com.zzandrive.app.runtime.UiState
 import com.zzandrive.app.runtime.ZzanController
 import com.zzandrive.app.ui.BtnSize
 import com.zzandrive.app.ui.CharacterStageView
+import com.zzandrive.app.ui.Depth
+import com.zzandrive.app.ui.Neu
+import com.zzandrive.app.ui.NeuDrawable
+import com.zzandrive.app.ui.RingView
 import com.zzandrive.app.ui.Palette
 import com.zzandrive.app.ui.Pleos
 import com.zzandrive.app.ui.Type
@@ -120,6 +122,7 @@ class MainActivity : Activity() {
     private lateinit var routeCard: Card
     private var renderedRoutes: Any? = null
     private lateinit var idleStack: LinearLayout
+    private lateinit var idleScroll: ScrollView
     private lateinit var celebration: LinearLayout
     private lateinit var celebrationTitle: TextView
     private lateinit var celebrationSub: TextView
@@ -128,8 +131,16 @@ class MainActivity : Activity() {
     private lateinit var guideCard: Card
     private var renderedGuide: Any? = null
     private lateinit var locationNote: TextView
-    private lateinit var tilesBox: LinearLayout
-    private val tiles = mutableListOf<Tile>()
+    private lateinit var dashboard: LinearLayout
+    private lateinit var batteryTitle: TextView
+    private lateinit var batteryRing: RingView
+    private lateinit var batteryCaption: TextView
+    private lateinit var thresholdRing: RingView
+    private lateinit var thresholdCaption: TextView
+    private lateinit var monthRing: RingView
+    private lateinit var monthCaption: TextView
+    private lateinit var statusLine: TextView
+    private val ringColumns = mutableListOf<LinearLayout>()
 
     private lateinit var personaPopup: Popup
     private lateinit var locationPopup: Popup
@@ -337,8 +348,7 @@ class MainActivity : Activity() {
             s.vehicleOrigin != null -> "실차 데이터 · 가격·거리 예시"
             else -> "차량 연결 중 · 가격·거리 예시"
         }
-        marker.background = rounded(if (s.demo) palette.filled else palette.tint, Pleos.RADIUS_PILL)
-        marker.setTextColor(if (s.demo) palette.onFilled else palette.text2)
+        marker.setTextColor(if (s.demo) palette.brand else palette.text2)
         renderSettings(s)
         renderDemos()
 
@@ -367,6 +377,7 @@ class MainActivity : Activity() {
         val celebrate = s.pendingCelebrations.maxOrNull()
         if (celebrate != null && celebrate != shownCelebration) {
             shownCelebration = celebrate
+            idleScroll.scrollTo(0, 0) // the level-up card is first in the idle scroll
             stage.playLevelUp(who, celebrate) // before setCharacter, so the new food does not show first
             celebrationTitle.text = "${progress.food(celebrate)} 레벨 달성!"
             celebrationSub.text = if (celebrate == charLevel) {
@@ -403,14 +414,13 @@ class MainActivity : Activity() {
         }
         accrualText.visibility = if (wide) View.VISIBLE else View.GONE
 
-        renderTiles(s)
-
         // One card at a time: a question, a decision, the routes; otherwise the level-up and the last trip.
         val decision = renderAsk(s) || renderRecommendation(s, unit) || renderRoutes(s)
         val tripShown = renderTrip(s, decision)
         // With nothing else to show, three lines on what the app does.
         renderGuide(s, !decision && !tripShown && celebration.visibility != View.VISIBLE)
         idleStack.visibility = if (decision) View.GONE else View.VISIBLE
+        renderDashboard(s)
 
         // The primary action: one at a time. While a card asks for a decision it steps back (and leaves a narrow window).
         findButton.text = if (s.energyType.isElectric) "충전소 찾기" else "주유소 찾기"
@@ -427,8 +437,7 @@ class MainActivity : Activity() {
         // In a narrow window an open card needs the room: the last line waits. The listening badge always shows.
         bubble.visibility = if (s.lastLine == null || (!wide && decision)) View.GONE else View.VISIBLE
         listenBadge.visibility = if (s.listening) View.VISIBLE else View.GONE
-        tilesBox.visibility = if (wide || !decision) View.VISIBLE else View.GONE
-        locationNote.visibility = if (!s.demo && !app.locationGranted && tilesBox.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+        locationNote.visibility = if (!s.demo && !app.locationGranted && (wide || !decision)) View.VISIBLE else View.GONE
     }
 
     /** "+2,323원", "−377원", "0원": the sign as typography (U+2212), losses in the loss colour, the number strong. */
@@ -445,27 +454,55 @@ class MainActivity : Activity() {
         else -> WonFormat.screen(won)
     }
 
-    /** The car's state as four tiles: what a driver needs, nothing a developer reads. */
-    private fun renderTiles(s: UiState) {
+    /**
+     * The idle dashboard (Stitch "Circular Telemetry Gauges"): the battery or fuel with the alert level as a tick, the
+     * alert level itself, and this month as a donut of what was saved against what was taken off. Each ring says its
+     * value in the middle; the word under it says what the value means.
+     */
+    private fun renderDashboard(s: UiState) {
         val electric = s.energyType.isElectric
-        tiles[0].label.text = (if (electric) "배터리" else "연료") + (s.energy?.let { " · %.1f%s".format(it, s.energyType.unit) } ?: "")
-        tiles[0].value.text = s.socPercent?.let { "%.0f%%".format(it) } ?: "확인 중"
-        tiles[1].label.text = "주행 상태"
-        tiles[1].value.text = when {
-            s.refilling -> if (electric) "충전 확인 중" else "주유 확인 중"
-            s.parked == true -> "정차 중"
-            s.parked == false -> "주행 중"
-            else -> "확인 중"
+        batteryTitle.text = if (electric) "배터리" else "연료"
+        val soc = s.socPercent
+        batteryRing.fraction = ((soc ?: 0.0) / 100.0).toFloat()
+        batteryRing.threshold = s.threshold / 100f
+        batteryRing.value = soc?.let { "%.0f%%".format(it) } ?: "–"
+        // At or below the alert level (the same rule the alert uses) the arc and the number turn to the warning colour.
+        val low = soc != null && TriggerPolicy.fires(soc, s.threshold)
+        batteryRing.arcColor = if (low) palette.chartRed else null
+        batteryRing.valueColor = if (low) palette.negative else palette.text
+        batteryRing.contentDescription = "${batteryTitle.text} ${batteryRing.value}, 알림 기준 ${s.threshold}%"
+        batteryCaption.text = s.energy?.let { "%.1f%s".format(it, s.energyType.unit) } ?: "확인 중"
+        thresholdRing.fraction = s.threshold / 100f
+        thresholdRing.value = "${s.threshold}%"
+        thresholdRing.contentDescription = "알림 기준 ${s.threshold}%"
+        thresholdCaption.text = "이 아래면 먼저 알려요"
+        val saved = s.monthSavedWon
+        val taken = s.monthDeductedWon
+        val total = saved + taken
+        monthRing.segments = if (total > 0) {
+            listOf(saved.toFloat() / total to palette.chartBlue, taken.toFloat() / total to palette.chartRed)
+        } else {
+            emptyList()
         }
-        tiles[2].label.text = "알림 기준"
-        tiles[2].value.text = "${s.threshold}%"
-        tiles[3].label.text = "음성 답"
-        tiles[3].value.text = when {
-            !s.voiceAvailable -> "화면으로만"
-            s.listening -> "듣는 중…"
-            s.voiceAnswers -> "켜짐"
-            else -> "꺼짐"
-        }
+        monthRing.value = money(s.monthNetWon).removeSuffix("원")
+        monthRing.valueColor = if (s.monthNetWon < 0) palette.negative else palette.text
+        monthRing.contentDescription = "이번 달 손익 ${money(s.monthNetWon)}"
+        // No-break spaces keep each word with its amount: a narrow column breaks at the dot, never cuts the deduction.
+        monthCaption.setKorean("아낀\u00A0${WonFormat.screen(saved)} · 빠진\u00A0${WonFormat.screen(taken)}")
+        statusLine.text = listOf(
+            when {
+                s.refilling -> if (electric) "충전 확인 중" else "주유 확인 중"
+                s.parked == true -> "정차 중"
+                s.parked == false -> "주행 중"
+                else -> "차량 연결 중"
+            },
+            "음성 답 " + when {
+                !s.voiceAvailable -> "화면으로만"
+                s.listening -> "듣는 중…"
+                s.voiceAnswers -> "켜짐"
+                else -> "꺼짐"
+            },
+        ).joinToString(" · ")
     }
 
     /** One question at a time (기획서 p.5): the question and its answers as large buttons, two to a row. */
@@ -696,8 +733,9 @@ class MainActivity : Activity() {
         }
         if (trip == renderedTrip) return true
         renderedTrip = trip
+        idleScroll.scrollTo(0, 0) // a new trip is the news: the card starts on screen even if the rings were scrolled
         val p = trip.penalty
-        tripCard.title.text = SpannableStringBuilder("이번 주행 ").apply {
+        tripCard.title.text = SpannableStringBuilder("이번 주행 분석 ").apply {
             val start = length
             append(money(-p.fullWon))
             setSpan(ForegroundColorSpan(palette.negative), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -710,22 +748,41 @@ class MainActivity : Activity() {
             },
         )
         tripCard.body.removeAllViews()
-        val lines = listOfNotNull(
-            ("급가속 ${p.accelEvents}건" to p.accelCost.toWon()).takeIf { p.accelEvents > 0 },
-            ("공회전 ${p.idleSeconds / 60}분 (3분 초과 ${p.idleEvalSeconds / 60}분)" to p.idleCost.toWon()).takeIf { p.idleEvalSeconds > 0 },
-            ("과속 ${p.speedingKm.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()}km" to p.speedingCost.toWon()).takeIf { p.speedingCost.signum() > 0 },
+        val parts = listOfNotNull(
+            Triple("급가속 ${p.accelEvents}건", p.accelCost.toWon(), palette.chartRed).takeIf { p.accelEvents > 0 },
+            Triple("공회전 ${p.idleSeconds / 60}분 (3분 초과 ${p.idleEvalSeconds / 60}분)", p.idleCost.toWon(), palette.chartGold).takeIf { p.idleEvalSeconds > 0 },
+            Triple("과속 ${p.speedingKm.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()}km", p.speedingCost.toWon(), palette.chartBlue)
+                .takeIf { p.speedingCost.signum() > 0 },
         )
-        lines.forEachIndexed { i, (name, won) ->
-            if (i > 0) tripCard.body.addView(View(this).apply { setBackgroundColor(palette.divider) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
-            val row = LinearLayout(this).apply {
+        val sum = parts.sumOf { it.second }.coerceAtLeast(1)
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val donut = RingView(this, palette).apply {
+            segments = parts.map { it.second.toFloat() / sum to it.third }
+            value = money(-p.fullWon).removeSuffix("원")
+            valueColor = palette.negative
+            valueSp = 36f
+            caption = "${parts.size}가지"
+            contentDescription = "이번 주행 ${money(-p.fullWon)}"
+        }
+        row.addView(donut, LinearLayout.LayoutParams(dp(if (wide) 244 else 208), dp(if (wide) 244 else 208)))
+        val legend = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        parts.forEachIndexed { i, (name, won, color) ->
+            if (i > 0) legend.addView(View(this).apply { setBackgroundColor(palette.divider) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
+            val line = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(80)
+                minimumHeight = dp(72)
             }
-            row.addView(label(Type.BODY2).apply { text = name }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(label(Type.BODY2_STRONG, palette.negative).apply { text = money(-won) })
-            tripCard.body.addView(row)
+            line.addView(View(this).apply { background = rounded(color, Pleos.RADIUS_PILL) }, LinearLayout.LayoutParams(dp(16), dp(16)))
+            line.addView(label(Type.BODY2, maxLines = 2).apply { setKorean(name) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
+            line.addView(label(Type.BODY2_STRONG, palette.negative).apply { text = money(-won); fontFeatureSettings = "tnum" })
+            legend.addView(line)
         }
+        row.addView(legend, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(Pleos.GAP) })
+        tripCard.body.addView(row)
         tripCard.notes(
             listOfNotNull(
                 "급제동 ${p.decelEvents}건은 기록만 해요".takeIf { p.decelEvents > 0 },
@@ -759,9 +816,9 @@ class MainActivity : Activity() {
                 label(Type.LABEL1_STRONG, palette.text, center = true).apply {
                     text = "${i + 1}"
                     gravity = Gravity.CENTER
-                    background = rounded(palette.surfaceAccent, Pleos.RADIUS_PILL)
+                    background = neu(NeuDrawable.Style.INSET, Depth.SMALL, shape = NeuDrawable.Shape.CIRCLE)
                 },
-                LinearLayout.LayoutParams(dp(40), dp(40)),
+                LinearLayout.LayoutParams(dp(48), dp(48)),
             )
             row.addView(
                 label(if (wide) Type.BODY2 else Type.BODY3, maxLines = 2).apply { setKorean(line) },
@@ -769,7 +826,7 @@ class MainActivity : Activity() {
             )
             guideCard.body.addView(row)
         }
-        // The narrow window has just enough room for the three lines.
+        // The narrow window leaves out the source line (the card sits under the rings there and scrolls).
         guideCard.notes(if (wide) "가격·거리: ${DataOrigin.PLAN_EXAMPLE.label} · 연비·전비: ${DataOrigin.SURVEY.label}" else "")
     }
 
@@ -870,23 +927,29 @@ class MainActivity : Activity() {
      */
     private fun applyLayout(widthDp: Int) {
         wide = widthDp >= WIDE_DP
+        // The last trip is the news: in the narrow window it comes before the rings, so it starts on screen.
+        idleStack.removeView(tripCard.root)
+        idleStack.addView(tripCard.root, idleStack.indexOfChild(dashboard) + if (wide) 1 else 0)
         val movable = listOf(marker, heroBlock, stage, levelBlock, findButton, rightCol)
         movable.forEach { (it.parent as? ViewGroup)?.removeView(it) }
         main.removeAllViews()
         val side = dp(if (wide) 32 else 24)
         body.setPadding(side, dp(16), side, side)
         titleText.applyType(if (wide) Type.TITLE2 else Type.TITLE3)
-        val cardPad = dp(if (wide) 32 else 24)
+        // Raised surfaces are drawn inside their views, so their padding adds the room the shadows need.
+        val cardPad = dp(if (wide) 32 else 24) + neuPad(Depth.LARGE)
         listOf(askCard, recCard, routeCard, tripCard, guideCard).forEach { it.root.setPadding(cardPad, cardPad, cardPad, cardPad) }
         celebration.setPadding(cardPad, cardPad, cardPad, cardPad)
+        val ring = dp(if (wide) 264 else 228)
+        listOf(batteryRing, thresholdRing, monthRing).forEach { it.layoutParams = LinearLayout.LayoutParams(ring, ring) }
 
         if (wide) {
-            markerSlot.addView(marker)
+            markerSlot.addView(marker, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
             val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             left.addView(heroBlock)
             left.addView(stage, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(8) })
             left.addView(levelBlock, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
-            left.addView(findButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(BtnSize.L.height)).apply { topMargin = dp(Pleos.GAP) })
+            left.addView(findButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(BtnSize.L.height) + 2 * neuPad(Depth.SMALL)).apply { topMargin = dp(8) })
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             val leftWidth = (widthDp * 0.38f).roundToInt().coerceIn(520, 640)
             row.addView(left, LinearLayout.LayoutParams(dp(leftWidth), ViewGroup.LayoutParams.MATCH_PARENT))
@@ -903,19 +966,8 @@ class MainActivity : Activity() {
             val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             col.addView(band, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(334)))
             col.addView(rightCol, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(16) })
-            col.addView(findButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(BtnSize.L.height)).apply { topMargin = dp(16) })
+            col.addView(findButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(BtnSize.L.height) + 2 * neuPad(Depth.SMALL)).apply { topMargin = dp(4) })
             main.addView(col)
-        }
-
-        // The car's state: four across, or two by two in the narrow window.
-        tilesBox.removeAllViews()
-        tiles.forEach { (it.root.parent as? ViewGroup)?.removeView(it.root) }
-        tiles.chunked(if (wide) 4 else 2).forEachIndexed { r, chunk ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            chunk.forEachIndexed { i, t ->
-                row.addView(t.root, LinearLayout.LayoutParams(0, dp(112), 1f).apply { if (i > 0) marginStart = dp(16) })
-            }
-            tilesBox.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { if (r > 0) topMargin = dp(16) })
         }
 
         // Popups follow the window: the guide's widths, never wider than the window.
@@ -964,25 +1016,30 @@ class MainActivity : Activity() {
         topBar.addView(titleText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(16) })
         marker = label(Type.LABEL1_STRONG, palette.text2).apply {
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), 0, dp(20), 0)
+            background = neu(NeuDrawable.Style.INSET, Depth.SMALL, corner = 999f)
+            setPadding(dp(24), 0, dp(24), 0)
         }
         markerSlot = FrameLayout(this)
-        topBar.addView(markerSlot, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)).apply { marginStart = dp(24) })
+        topBar.addView(markerSlot, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(52)).apply { marginStart = dp(24) })
         topBar.addView(Space(this), LinearLayout.LayoutParams(0, 1, 1f))
-        topBar.addView(button("시연", Kind.SECONDARY, BtnSize.S, hitHeight = 80) {
+        topBar.addView(button("시연", Kind.SECONDARY, BtnSize.S) {
             demoPopup.show()
             lastState?.let(::render)
         })
         topBar.addView(
-            button("설정", Kind.SECONDARY, BtnSize.S, hitHeight = 80) {
+            button("설정", Kind.SECONDARY, BtnSize.S) {
                 settingsPopup.show()
                 lastState?.let(::render)
             },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(Pleos.GAP) },
+            // The two buttons share their shadow room: 20 dp between the visible shapes.
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(20) - 2 * neuPad(Depth.SMALL) },
         )
-        body.addView(topBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(80)))
+        // [설정]'s shadow room lies in the body's right padding, so its visible edge lines up with the content edge and,
+        // in the 840 dp window, [시연] stays clear of the window handle (top-centre 320×60). body draws into its padding.
+        body.clipToPadding = false
+        body.addView(topBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(90)).apply { marginEnd = -neuPad(Depth.SMALL) })
         main = FrameLayout(this)
-        body.addView(main, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(Pleos.GAP) })
+        body.addView(main, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(14) })
         root.addView(body)
 
         // ---- Left: the cumulative saving, the character, its level, the primary action.
@@ -1037,11 +1094,12 @@ class MainActivity : Activity() {
         // ---- Right: what the character says, the result, one card, the car's state.
         rightCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         bubble = label(Type.BODY3, maxLines = 2).apply {
-            background = outlined(palette.card, Pleos.RADIUS_ROW)
-            setPadding(dp(24), dp(16), dp(24), dp(16))
+            background = neu(NeuDrawable.Style.RAISED, Depth.MEDIUM, corner = 28f)
+            val pad = neuPad(Depth.MEDIUM)
+            setPadding(pad + dp(28), pad + dp(18), pad + dp(28), pad + dp(18))
             visibility = View.GONE
         }
-        rightCol.addView(bubble, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
+        rightCol.addView(bubble, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         listenBadge = label(Type.LABEL1_STRONG, palette.onFilled).apply {
             text = "듣는 중… 말로 답해도 돼요"
             gravity = Gravity.CENTER_VERTICAL
@@ -1049,13 +1107,19 @@ class MainActivity : Activity() {
             setPadding(dp(20), 0, dp(20), 0)
             visibility = View.GONE
         }
-        rightCol.addView(listenBadge, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)).apply { bottomMargin = dp(16) })
+        rightCol.addView(listenBadge, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)).apply {
+            bottomMargin = dp(8)
+            marginStart = neuPad(Depth.MEDIUM)
+        })
         resultText = label(Type.BODY3_STRONG, maxLines = 3).apply {
-            background = rounded(palette.surfaceHigh, Pleos.RADIUS_SMALL)
-            setPadding(dp(24), dp(16), dp(24), dp(16))
+            background = neu(NeuDrawable.Style.INSET, Depth.MEDIUM, corner = 24f)
+            setPadding(dp(28), dp(18), dp(28), dp(18))
             visibility = View.GONE
         }
-        rightCol.addView(resultText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
+        rightCol.addView(resultText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            val pad = neuPad(Depth.MEDIUM)
+            setMargins(pad, dp(4), pad, dp(8))
+        })
 
         slot = FrameLayout(this)
         askCard = card()
@@ -1085,7 +1149,7 @@ class MainActivity : Activity() {
         }
         celebration = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = outlined(palette.card, Pleos.RADIUS_CARD)
+            background = neu(NeuDrawable.Style.RAISED, Depth.LARGE, corner = Pleos.RADIUS_CARD.toFloat())
             visibility = View.GONE
         }
         celebrationTitle = label(Type.HEADLINE3, maxLines = 2)
@@ -1100,7 +1164,51 @@ class MainActivity : Activity() {
             },
             LinearLayout.LayoutParams(dp(280), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(Pleos.GAP) },
         )
-        idleStack.addView(celebration, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
+        idleStack.addView(celebration, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        // The dashboard: three rings and one status line, no boxes.
+        dashboard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val ringsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        fun ringColumn(title: TextView, ring: RingView, caption: TextView): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            addView(title)
+            addView(ring)
+            addView(caption, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(-4) })
+        }
+        batteryTitle = label(Type.BODY2_STRONG, palette.text2, center = true)
+        batteryRing = RingView(this, palette)
+        batteryCaption = label(Type.BODY3, palette.text3, center = true)
+        thresholdRing = RingView(this, palette).apply { arcColor = palette.chartGold }
+        thresholdCaption = label(Type.BODY3, palette.text3, center = true)
+        monthRing = RingView(this, palette).apply { valueSp = 36f }
+        monthCaption = label(Type.BODY3, palette.text3, maxLines = 2, center = true)
+        listOf(
+            ringColumn(batteryTitle, batteryRing, batteryCaption),
+            ringColumn(label(Type.BODY2_STRONG, palette.text2, center = true).apply { text = "알림 기준" }, thresholdRing, thresholdCaption),
+            ringColumn(label(Type.BODY2_STRONG, palette.text2, center = true).apply { text = "이번 달 손익" }, monthRing, monthCaption),
+        ).forEach { c ->
+            ringColumns += c
+            ringsRow.addView(c, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        dashboard.addView(ringsRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        // The car's state as one sunken pill under the rings (shown, not tapped), apart from the ring captions.
+        statusLine = label(Type.LABEL1, palette.text2, center = true).apply {
+            gravity = Gravity.CENTER
+            background = neu(NeuDrawable.Style.INSET, Depth.SMALL, corner = 999f)
+            setPadding(dp(28), 0, dp(28), 0)
+        }
+        dashboard.addView(
+            statusLine,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(20)
+            },
+        )
+        idleStack.addView(dashboard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(4) })
         tripCard = card()
         tripCard.footer.visibility = View.GONE
         idleStack.addView(tripCard.root, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -1111,17 +1219,20 @@ class MainActivity : Activity() {
         listOf(askCard, recCard, routeCard).forEach {
             slot.addView(it.root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        slot.addView(ScrollView(this).apply { addView(idleStack) }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // When the cards are taller than the room (a narrow window), the bottom edge fades to say there is more below.
+        idleScroll = ScrollView(this).apply {
+            isVerticalFadingEdgeEnabled = true
+            setFadingEdgeLength(dp(40))
+            addView(idleStack)
+        }
+        slot.addView(idleScroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         rightCol.addView(slot, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         locationNote = label(Type.LABEL1, palette.text3).apply {
             text = "위치 권한 꺼짐 · 들른 곳 확인 불가"
             visibility = View.GONE
         }
-        rightCol.addView(locationNote, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
-        tilesBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        repeat(4) { tiles += tile() }
-        rightCol.addView(tilesBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
+        rightCol.addView(locationNote, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
         buildPopups(root)
         return root
@@ -1275,7 +1386,7 @@ class MainActivity : Activity() {
     private fun card(): Card {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = outlined(palette.card, Pleos.RADIUS_CARD)
+            background = neu(NeuDrawable.Style.RAISED, Depth.LARGE, corner = Pleos.RADIUS_CARD.toFloat())
             visibility = View.GONE
         }
         val title = label(Type.TITLE1, maxLines = 2)
@@ -1323,7 +1434,16 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = dp(112)
             setPadding(dp(if (wide) 24 else 16), dp(20), dp(if (wide) 24 else 16), dp(20))
-            if (highlight) background = pressable(palette.tint, if (onClick != null) palette.tintPressed else palette.tint, Pleos.RADIUS_ROW)
+            if (highlight) {
+                background = if (onClick != null) {
+                    neu(NeuDrawable.Style.RAISED, Depth.SMALL, corner = Pleos.RADIUS_ROW.toFloat(), pressable = true).also {
+                        val pad = neuPad(Depth.SMALL)
+                        setPadding(paddingLeft + pad, paddingTop + pad, paddingRight + pad, paddingBottom + pad)
+                    }
+                } else {
+                    neu(NeuDrawable.Style.INSET, Depth.MEDIUM, corner = Pleos.RADIUS_ROW.toFloat())
+                }
+            }
         }
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val head = LinearLayout(this).apply {
@@ -1373,25 +1493,9 @@ class MainActivity : Activity() {
         label(Type.LABEL1_STRONG, if (kind == Badge.BRAND) palette.onBrand else palette.text).apply {
             this.text = text
             gravity = Gravity.CENTER_VERTICAL
-            background = rounded(if (kind == Badge.BRAND) palette.brand else palette.surfaceAccent, Pleos.RADIUS_PILL)
-            setPadding(dp(12), 0, dp(12), 0)
+            background = if (kind == Badge.BRAND) rounded(palette.brand, Pleos.RADIUS_PILL) else neu(NeuDrawable.Style.INSET, Depth.SMALL, corner = 999f)
+            setPadding(dp(14), 0, dp(14), 0)
         }
-
-    private class Tile(val root: LinearLayout, val label: TextView, val value: TextView)
-
-    private fun tile(): Tile {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = outlined(palette.card, Pleos.RADIUS_ROW)
-            setPadding(dp(16), 0, dp(16), 0)
-        }
-        val name = label(Type.LABEL1, palette.text3)
-        val value = label(Type.BODY1_STRONG)
-        root.addView(name)
-        root.addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
-        return Tile(root, name, value)
-    }
 
     /**
      * A Pleos system popup: scrim, a panel with radius 48 and padding 48, a title, an optional description, content that
@@ -1493,7 +1597,7 @@ class MainActivity : Activity() {
         text = if (maxLines > 1) Pleos.keepAll(value) else value
     }
 
-    /** PRIMARY: the mascot's teal, one at a time. SECONDARY: the Pleos tint. TERTIARY: text only. FILLED: a chosen chip. */
+    /** PRIMARY: Hyundai Blue (Active Blue at night), one at a time. SECONDARY: raised, page-coloured. TERTIARY: text only (sinks while pressed). FILLED: a chosen chip. */
     private enum class Kind { PRIMARY, SECONDARY, TERTIARY, FILLED }
 
     /**
@@ -1511,9 +1615,10 @@ class MainActivity : Activity() {
         gravity = Gravity.CENTER
         minHeight = 0
         minWidth = 0
-        minimumHeight = dp(hitHeight ?: size.height)
-        minimumWidth = dp(size.minWidth)
-        setPadding(dp(size.padH), 0, dp(size.padH), 0)
+        val pad = neuPad(Depth.SMALL)
+        minimumHeight = dp(hitHeight ?: size.height) + 2 * pad
+        minimumWidth = dp(size.minWidth) + 2 * pad
+        setPadding(dp(size.padH) + pad, pad, dp(size.padH) + pad, pad)
         tag = ButtonSpec(size, hitHeight)
         style(this, kind)
         setOnClickListener { onClick() }
@@ -1539,24 +1644,40 @@ class MainActivity : Activity() {
         if (spec.kind == kind && spec.night == palette.night) return
         spec.kind = kind
         spec.night = palette.night
-        val (fill, pressed, onFill) = when (kind) {
-            Kind.PRIMARY -> Triple(palette.brand, palette.brandPressed, palette.onBrand)
-            Kind.SECONDARY -> Triple(palette.tint, palette.tintPressed, palette.text)
-            Kind.TERTIARY -> Triple(Color.TRANSPARENT, palette.tintPressed, palette.text2)
-            Kind.FILLED -> Triple(palette.filled, palette.filledPressed, palette.onFilled)
+        val r = spec.size.radius.toFloat()
+        val onFill = when (kind) {
+            Kind.PRIMARY -> palette.onBrand
+            Kind.SECONDARY -> palette.text
+            Kind.TERTIARY -> palette.text2
+            Kind.FILLED -> palette.onFilled
         }
-        val r = spec.size.radius
-        val states = StateListDrawable().apply {
-            addState(intArrayOf(-android.R.attr.state_enabled), rounded(palette.tint, r))
-            addState(intArrayOf(android.R.attr.state_pressed), rounded(pressed, r))
-            addState(intArrayOf(), rounded(fill, r))
+        // A background that reports padding would replace what button() set (View.setBackground): keep it.
+        val keep = intArrayOf(b.paddingLeft, b.paddingTop, b.paddingRight, b.paddingBottom)
+        b.background = when (kind) {
+            // Raised soft-UI surfaces that sink into a well (with a rim in the accent colour) while pressed.
+            Kind.PRIMARY -> neu(NeuDrawable.Style.RAISED, Depth.SMALL, corner = r, fill = palette.brand, pressable = true)
+            Kind.SECONDARY -> neu(NeuDrawable.Style.RAISED, Depth.SMALL, corner = r, pressable = true)
+            Kind.FILLED -> neu(NeuDrawable.Style.RAISED, Depth.SMALL, corner = r, fill = palette.filled, pressable = true)
+            // Text only: flat and clear, it sinks into a well like the others while pressed.
+            Kind.TERTIARY -> neu(NeuDrawable.Style.FLAT, Depth.SMALL, corner = r, fill = NeuDrawable.NONE, pressable = true)
         }
-        val inset = spec.hitHeight?.let { (it - spec.size.height) / 2 } ?: 0
-        b.background = if (inset > 0) InsetDrawable(states, 0, dp(inset), 0, dp(inset)) else states
+        b.setPadding(keep[0], keep[1], keep[2], keep[3])
         b.setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()), intArrayOf(palette.textDisabled, onFill)))
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
+
+    /** Room around a raised surface for its shadows (see [Neu.pad]). */
+    private fun neuPad(depth: Depth): Int = Neu.pad(depth, resources.displayMetrics.density).roundToInt()
+
+    private fun neu(
+        style: NeuDrawable.Style,
+        depth: Depth,
+        corner: Float = Pleos.RADIUS_CARD.toFloat(),
+        fill: Int = palette.page,
+        pressable: Boolean = false,
+        shape: NeuDrawable.Shape = NeuDrawable.Shape.ROUND_RECT,
+    ) = NeuDrawable(palette, resources.displayMetrics.density, shape, corner, depth, style, fill, pressable)
 
     private companion object {
         const val REQ_LOCATION = 11

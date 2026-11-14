@@ -138,6 +138,19 @@ class Ledger(
 
     fun dailyNet(date: LocalDate): Long = list.sumOf { e -> if (day(e.atMs) == date) net(e) else 0L }
 
+    /** This month's confirmed savings only (the gain side of [monthlyNet]). */
+    fun monthlySaved(month: YearMonth): Long =
+        list.sumOf { e -> if (month(e.atMs) == month && e is SavingConfirmed) e.amountWon else 0L }
+
+    /** This month's deductions in full (driving habits and opportunity costs; the loss side of [monthlyNet]). */
+    fun monthlyDeducted(month: YearMonth): Long = list.sumOf { e ->
+        if (month(e.atMs) != month) 0L else when (e) {
+            is PenaltyConfirmed -> e.fullWon
+            is OpportunityCostConfirmed -> e.amountWon
+            else -> 0L
+        }
+    }
+
     private fun net(e: LedgerEvent): Long = when (e) {
         is SavingConfirmed -> e.amountWon
         is PenaltyConfirmed -> -e.fullWon

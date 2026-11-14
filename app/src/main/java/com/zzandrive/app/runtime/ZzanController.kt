@@ -97,6 +97,9 @@ data class UiState(
     val totalSavedWon: Long,
     val todayNetWon: Long,
     val monthNetWon: Long,
+    /** The two sides of [monthNetWon]: confirmed savings and full deductions. */
+    val monthSavedWon: Long = 0,
+    val monthDeductedWon: Long = 0,
     val recommendation: Recommendation?,
     val approval: Approval,
     val refilling: Boolean,
@@ -1249,6 +1252,8 @@ class ZzanController(
             totalSavedWon = progress.totalSaved(s),
             todayNetWon = ledger.dailyNet(today),
             monthNetWon = ledger.monthlyNet(YearMonth.from(today)),
+            monthSavedWon = ledger.monthlySaved(YearMonth.from(today)),
+            monthDeductedWon = ledger.monthlyDeducted(YearMonth.from(today)),
             recommendation = if (approval == Approval.NONE) null else currentRecommendation(),
             approval = approval,
             refilling = detector.isRefilling,
