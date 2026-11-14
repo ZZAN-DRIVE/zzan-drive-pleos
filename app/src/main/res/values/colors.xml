@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Same as Palette.DAY.background -->
-    <color name="zzan_background">#F3FAFC</color>
+    <!-- Same as Palette.DAY.page -->
+    <color name="zzan_background">#F7F8FA</color>
 </resources>

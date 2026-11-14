@@ -16,9 +16,10 @@ Pleos Connect(Android Automotive)에서 실행되는 앱 모듈이다. 화면, �
 | `voice/PleosSttListener.kt` | Pleos SpeechToText(`ON_DEVICE`). 앱이 물은 뒤 5초 듣는다(SDK에 시간 제한이 없어 앱 타이머로 `stop`). 듣는 동안 화면에 "듣는 중…". `recognize`(debug 명령 `hearpcm`)는 녹음한 16 kHz PCM을 `sendAudio`로 넣는다 |
 | `voice/SpeechClip.kt` | debug 명령 `hearpcm`용. 앱 전용 저장소의 `files/stt/NAME.wav`(16 kHz·모노·16비트, 없으면 `NAME.pcm`)를 읽고 앞뒤에 무음을 붙인다 |
 | `ui/CharacterStageView.kt` | 캐릭터 연출. 같은 자리에서 클립을 바꿔 재생한다: 레벨별 반복 클립(들고 대기, 없으면 대기)과 한 번 재생하는 클립(레벨업 → 새 음식 먹기, 탭하면 먹기, 정산 뒤 기쁨·시무룩). 보이는 크기로 디코드해 1:1로 그리고(최대 720 px), 다음 클립은 250 ms 페이드로 잇는다. 화면이 안 보이거나(onStop) 시연 데이터가 주행 중이면 멈춘다. 클립 순서 규칙은 `:core`의 `motion/CharacterClips.kt`(단위 테스트) |
-| `ui/Palette.kt` | 짠돌이 그림에서 뽑은 색(청록·아쿠아·남색·번개 노랑·볼 분홍)의 주간·야간 팔레트. 모든 글자 대비 4.5:1 이상(계산으로 확인) |
+| `ui/Palette.kt` | Pleos Connect 디자인 토큰의 주간·야간 색(배경·카드·팝업·글자 4단계·구분선·보조 버튼·선택 칩)과 앱만의 두 색(주 버튼의 짠돌이 청록, 레벨 표시의 번개 노랑), 손실 금액의 빨강. 모든 글자 대비 4.5:1 이상(계산으로 확인) |
+| `ui/Pleos.kt` | Pleos 글자 단계(60·48·40·36·32·30·28·26·24, 굵기 400·600·700), 버튼 크기(높이 100·80·64, 모서리 32·24·16), 간격·모서리·팝업 폭, 한글 낱말이 줄 중간에서 끊기지 않게 하는 `keepAll` |
 | `ui/CharacterArtView.kt` | 클립이 하나도 없을 때만 쓰는 안전망 그림 |
-| `MainActivity.kt` | 제품 화면. 가운데: 날짜·이번 달 손익(크게)·오늘 손익, 캐릭터, 레벨·다음 음식까지 남은 금액. 왼쪽 레일(운전석 쪽): 데이터 출처 표시(시연 주황·실차 청록), [충전소 찾기]/[주유소 찾기], [설정], 아래에 "시연·심사용" 묶음([시연 B · 충전], [시연 A · 주유], [실차 모드], [처음부터]: 확인 후 삭제), 차량 상태(잔량, 정차·주행, 알림 기준, 음성 답). 질문 카드(한 번에 질문 하나, 칩)와 비교 카드(첫 줄 결론, 장소·도로 거리·단가·합계, 응/아니/왜 거기야?)는 질문이나 결정이 진행 중일 때만 연다. 설정: 알림 기준 %, 음성 답 켜기·끄기, 시급(출발 전 경로 비교), 캐릭터, 오픈소스 고지. 창 폭 1200dp 이상은 카드가 옆에, 그 아래(분할 창)는 카드가 캐릭터 아래에 온다 |
+| `MainActivity.kt` | 제품 화면(Pleos 디자인 가이드 배치). 위쪽 페이지 내비게이션 바: 앱 표시·이름, 데이터 출처("실차 데이터"/"시연 데이터"), [시연], [설정]. 왼쪽 단(운전석 쪽): 누적 절약액(크게)과 이번 달·오늘 손익, 캐릭터, 레벨·다음 음식까지 남은 금액, 주 버튼 [충전소 찾기]/[주유소 찾기]. 오른쪽 단: 캐릭터의 말, 결과 줄, 카드 하나(질문 2열 버튼 / 비교 목록: 첫 줄 결론, 장소·거리·단가·합계 또는 총 지출·최저 대비, 응/아니/왜 거기야? / 출발 전 경로 / 레벨업 / 이번 주행 차감 / 안내), 차량 상태 4칸. 팝업(Pleos 시스템 팝업 규격): 설정(알림 기준 %, 음성 답, 시급, 캐릭터, 오픈소스 고지), 시연(시연 B·A·C, 실차 모드, 처음부터: 확인 후 삭제), 캐릭터 선택, 위치 권한 안내. 창 폭 1200dp 이상은 두 단, 그 아래(세로 창)는 금액·레벨과 작은 캐릭터 아래에 카드. Back은 팝업을 닫고, 없으면 앱을 뒤로 보낸다 |
 | `diag/DiagnosticsActivity.kt` | SDK 연결 진단 화면("짠드라이브 · Pleos 연결 진단", debug 전용). Vehicle·NaviHelper·TTS·STT·FusedLocation·주행 제한 결과를 logcat 태그 `JjanShell`로 남긴다. `scripts/verify-app.sh`가 이 화면을 실행한다 |
 
 - 제품 화면은 정차 전용이다. `distractionOptimized`를 선언하지 않았으므로 주행 중에는 시스템이 화면을 막는다(R-33). 주행 중에도 음성은 나오며, 레벨업 화면과 레벨업 음성은 정차한 뒤에 나온다(R-46).
@@ -58,13 +59,17 @@ adb -s emulator-5554 shell am start -n com.zzandrive.app/.diag.DiagnosticsActivi
 | `ROUTES skipped (busy)` | 질문이나 결정이 열려 있어 출발 전 경로 비교를 열지 않음 |
 | `ANSWER reference=… / ANSWER fill=…` | 화면 칩이나 음성으로 받은 답 |
 | `CAND ref=current in=ev-a,ev-b excluded=ev-far:6.2` | 기준 위치에서 도로 5 km 안 후보와 뺀 후보(km) |
-| `ROUTE dest=강릉 remainKm=220 branch=UNREACHABLE limitKm=54.0 reachable=…` | 목적지 분기(spec D-30)와 갈 수 있는 후보 |
-| `REC … baseline=ev-a best=ev-b expected=2308 mode=COST_INCLUDED rule=VS_NEAREST qty=…` | 추천, 예상 절약액, 비교 방식(D-24~D-27), 적립 기준(D-29), 예정량 |
+| `ROUTE dest=강릉 remainKm=100 branch=UNREACHABLE limitKm=82.6 reachable=… reach=no` | 목적지 분기: 주행 가능 거리(spec D-33), 그 안의 주유소, 목적지까지 갈 수 있는지 |
+| `TOTAL ref=1855.43 wage=5000 qty=30 route-c:15134(0) route-d:15450(-316) …` | 주유소를 들르는 경로의 총 지출과 최저 대비 손익(D-32, D-34) |
+| `REC none (no stop needed) …` · `ADVICE closed` | 목적지까지 갈 수 있고 들르지 않는 편이 덜 들어 안내만 함(기록 없음) |
+| `REC … baseline=ev-a best=ev-b expected=2323 mode=COST_INCLUDED rule=VS_NEAREST qty=…` | 추천, 예상 절약액, 비교 방식(D-24~D-27, `ROUTE_TOTAL`은 D-32), 적립 기준(D-29), 예정량 |
 | `DECIDE approved=true … navigation=true` | 승인과 내비 전달. `DECIDE nearest`는 "가까운 데로 가" |
-| `PASS station=ev-b rec=… amount=92` · `OPP amount=92 applied=92 …` | 승인한 곳을 넣지 않고 지나침(300 m 안 → 500 m 밖), 기회비용 차감(D-28) |
-| `ROUTES dest=강릉 best=national rival=highway faster=-70 costMore=-6289 wage=5000 highway:52675+13333 …` | 출발 전 경로 비교(D-31): 경로별 운행비 + 시간 환산. `:stop`이 붙은 경로는 도착 전에 알림 기준에 닿아 추천에서 뺌. `ROUTES closed`는 [확인] |
+| `PASS station=ev-b rec=… amount=77` · `OPP amount=77 applied=77 …` | 승인한 곳을 넣지 않고 지나침(300 m 안 → 500 m 밖), 기회비용 차감(D-28) |
+| `ROUTES dest=강릉 best=national rival=highway faster=-70 costMore=-7575 wage=5000 highway:37892+13333 …` | 출발 전 경로 비교(D-31): 경로별 운행비 + 시간 환산. `:stop`이 붙은 경로는 도착 전에 알림 기준에 닿아 추천에서 뺌. `ROUTES closed`는 [확인] |
 | `DETECT … q=40.000 basis=ENERGY … station=ev-b` | 충전·주유 감지와 장소 매칭 |
-| `SETTLE amount=2308 level=3 accrual=1308 remaining=5692` | 정산 확정. `SETTLE skipped reason=…`은 적립하지 않은 이유 |
+| `SETTLE amount=2323 level=3 accrual=1323 remaining=5677` | 정산 확정. `SETTLE skipped reason=…`은 적립하지 않은 이유 |
+| `TRIP start …` · `HABIT accel … n=1 cost=136.00` · `HABIT idle over 180s` · `HABIT speeding start …` · `HABIT decel … recorded` | 운전 습관 감지(D-35~D-37). 주행 중에는 금액 없는 한 줄만 말함 |
+| `TRIP end … raw=376.90` · `PENALTY trip=… full=377 applied=300 level=1 accrual=0` | 주행 끝 정산(D-38): 내역, 차감액, 레벨 적립액에서 실제로 뺀 금액 |
 | `SAY …` | 음성 안내 문장 |
 | `MUTED (demo running) …` | 시연 중이라 실차 런타임이 말하지 않은 문장 |
 | `SHOW level-up 3` | 레벨업 연출 시작(정차 중) |

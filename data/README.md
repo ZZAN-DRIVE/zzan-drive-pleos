@@ -5,7 +5,7 @@
 | 폴더 | 책임 |
 | --- | --- |
 | `source-api/` | `VehicleSource`(차량 값 구독), `StationSource`(주유소·충전소와 단가), `PlaceSource`(저장한 장소), `RouteSource`(안내 중인 경로, 출발 전 경로 후보), `Clock`·`Scheduler` 인터페이스와 데이터 모델. 모든 값에 출처(`DataOrigin`)가 붙는다 |
-| `source-mock/` | 연료·배터리 잔량, 충전구·충전 스위치, 정차·주행, 위치를 시계열로 재생하는 Mock(`Scenarios`, `ReplayVehicleSource`)과 예시 주유소·충전소·경로·저장 장소(`Fixture*`). 에뮬레이터 센서가 부족할 때(spec V-02)의 대안 |
+| `source-mock/` | 연료·배터리 잔량, 충전구·충전 스위치, 정차·주행, 위치를 시계열로 재생하는 Mock(`Scenarios`, `ReplayVehicleSource`)과 예시 주유소·충전소·경로·저장 장소(`Fixture*`, 강릉길 주유소 5곳은 기획 계산식의 예시), 시연 C의 운전 습관 주행(`Scenarios.habitTrip`: 속도·엔진·제한속도). 에뮬레이터 센서가 부족할 때(spec V-02)의 대안 |
 | `source-pleos/` | 실제 Pleos SDK 연동. `PleosVehicleSource`(Vehicle SDK·FusedLocation), `PleosNavigator`(NaviHelper) |
 
 `source-mock`으로 만든 것은 spec.md 9.1 연동 매트릭스에서 🟡(Mock)로 표기한다.
