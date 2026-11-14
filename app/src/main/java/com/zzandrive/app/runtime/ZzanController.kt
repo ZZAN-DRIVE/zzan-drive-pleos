@@ -105,6 +105,8 @@ data class UiState(
     val refilling: Boolean,
     val lastResult: String?,
     val lastLine: String?,
+    /** Counts the spoken lines, so the screen can tell a line said again from one it has already shown. */
+    val lineSeq: Int = 0,
     val pendingCelebrations: List<Int>,
     /** Today in Asia/Seoul: the date on screen and the day of [todayNetWon] / month of [monthNetWon]. */
     val today: LocalDate,
@@ -198,6 +200,7 @@ class ZzanController(
     private var approval = Approval.NONE
     private var lastResult: String? = null
     private var lastLine: String? = null
+    private var lineSeq = 0
     private var reaction: Reaction? = null
     private var dialog: DialogState = DialogState.Idle
 
@@ -332,6 +335,7 @@ class ZzanController(
         // The verdict belongs to this comparison: a newer one (wage, threshold) or [확인] drops or stops it.
         speaker.refresh()
         lastLine = line
+        lineSeq++
         log("SAY $line")
         speaker.voice(prefs.persona ?: Persona.ZZANDORI)
         speaker.speakWhile(line, { !stopped && routeComparison === c })
@@ -420,6 +424,7 @@ class ZzanController(
     private fun ask(line: String, expect: Expect) {
         stopListening() // one question at a time: an older window closes and its result is ignored
         lastLine = line
+        lineSeq++
         log("SAY $line")
         speaker.voice(prefs.persona ?: Persona.ZZANDORI)
         if (!voiceOn()) {
@@ -526,6 +531,7 @@ class ZzanController(
                     val again = lines().reprompt(expect, vehicle.energyType.isElectric, place)
                     log("SAY $again")
                     lastLine = again
+                    lineSeq++
                     speakAndListen(again, expect)
                 }
                 else -> {
@@ -1209,6 +1215,7 @@ class ZzanController(
 
     private fun say(text: String) {
         lastLine = text
+        lineSeq++
         log("SAY $text")
         speaker.voice(prefs.persona ?: Persona.ZZANDORI)
         speaker.speakWhile(text, { !stopped })
@@ -1259,6 +1266,7 @@ class ZzanController(
             refilling = detector.isRefilling,
             lastResult = lastResult,
             lastLine = lastLine,
+            lineSeq = lineSeq,
             pendingCelebrations = CelebrationPolicy.pending(prefs.lastCelebratedLevel, s.level, parked == true),
             today = today,
             reaction = reaction,

@@ -5,9 +5,11 @@ import android.graphics.Typeface
 /**
  * The Pleos Connect type ramp (size / line height in sp, Asta Sans weight). On the car the system sans-serif is
  * Asta Sans: 400 is Regular, 600 the guide's "Strong" (Bold), 700 "Extra Strong" (ExtraBold).
- * Nothing on the screen is smaller than 24, and amounts are never smaller than 28.
+ * Nothing on the screen is smaller than 24, and amounts are never smaller than 28. [HERO] is the screen's one hero
+ * figure (the amount above the character), a step above the guide's ramp.
  */
 enum class Type(val size: Int, val line: Int, val weight: Int) {
+    HERO(76, 92, 700),
     HEADLINE1(60, 80, 700),
     HEADLINE3(48, 64, 700),
     TITLE1(40, 52, 600),
