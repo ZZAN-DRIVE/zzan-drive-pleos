@@ -85,8 +85,8 @@ import kotlin.math.roundToLong
  * page-navigation bar on top (what data the screen runs on, the car's state as icons, [사용법], [시연], [설정]; no
  * title and no logo: the bar stays quiet) and two columns under it. Left, on the driver's side: the date, the amount saved so far, the character with its level,
  * and the one primary action. Right: what the character just said, then either the dashboard (a level-up when there
- * is one, three rings that take the room when they stand alone, and under them the last trip) or one decision card
- * (a question, a comparison, the routes).
+ * is one, three rings, and under them the last trip or, with none to show, three driving habits as quests) or one
+ * decision card (a question, a comparison, the routes).
  * The long explanations (formulas, sources) are one tap away behind (i), and how the app works behind [사용법].
  *
  * Glass on a soft backdrop of the CI colours (ui/Palette.kt, ui/Glass.kt, ui/Ambient.kt); sizes and type follow the
@@ -162,6 +162,10 @@ class MainActivity : Activity() {
     private lateinit var guideAlert: TextView
     private var renderedGuide: String? = null
     private var ringColumnDp = 0
+    private lateinit var questPanel: LinearLayout
+    private var questTiles: List<QuestTile> = emptyList()
+    private var renderedQuests: Any? = null
+    private var questPreview = false
     private var ringsCompact: Boolean? = null
     private lateinit var dashboard: LinearLayout
     private lateinit var batteryTitle: TextView
@@ -354,6 +358,8 @@ class MainActivity : Activity() {
                 i.getStringExtra(EXTRA_PERSONA)?.let { p -> Persona.entries.firstOrNull { it.name.equals(p, ignoreCase = true) } },
                 i.getIntExtra(EXTRA_PERCENT, 0),
             )
+            // For screenshots: the quests as they look after a trip that kept every habit.
+            "quests" -> questPreview = i.getStringExtra(EXTRA_ARG) == "done"
             // Popups for checks and screenshots: popup --es zzan.arg settings|demos|guide|notices|reset|persona|close.
             "popup" -> when (i.getStringExtra(EXTRA_ARG)) {
                 "settings" -> settingsPopup.show()
@@ -486,11 +492,12 @@ class MainActivity : Activity() {
         artNote.visibility = if (stage.borrowed && wide) View.VISIBLE else View.GONE
 
         // One card at a time: a question, a decision, the routes; otherwise the dashboard with the level-up and the
-        // last trip. With no trip to show, the rings take the room.
+        // last trip. With no trip to show, the rings grow and the driving-habit quests take the room under them.
         val decision = renderAsk(s) || renderRecommendation(s, unit) || renderRoutes(s)
         val tripShown = renderTrip(s, decision)
         // The trip card is hidden behind a decision and comes back after it: the rings keep their size meanwhile.
         sizeRings(compact = s.trip?.let { it.penalty.fullWon > 0 } == true)
+        renderQuests(s, !decision && !tripShown && celebration.visibility != View.VISIBLE)
         val alertLine = "${if (s.energyType.isElectric) "배터리" else "연료"}가 ${s.threshold}% 아래로 내려가면 먼저 물어봐요"
         if (alertLine != renderedGuide) {
             renderedGuide = alertLine
@@ -1026,13 +1033,53 @@ class MainActivity : Activity() {
     }
 
     /**
-     * The rings' size. Alone on the panel they are as large as a third of it allows; with the last trip under them they
-     * step back, so both fit on the screen.
+     * Driving habits as quests, in the room under the rings: what to try on the next drive, each a line icon, a name and
+     * its rule. After a trip that was measured, a habit that was kept shows as done (a check and the word, not colour
+     * alone); a trip that cost money shows as the trip card instead.
+     */
+    private fun renderQuests(s: UiState, show: Boolean) {
+        questPanel.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+        val p = s.trip?.penalty
+        val electric = s.energyType.isElectric
+        val key = listOf(electric, p?.accelEvents, p?.idleEvalSeconds, p?.speedingKm?.signum(), wide, questPreview)
+        if (key == renderedQuests) return
+        renderedQuests = key
+        // done: null when nothing was measured for it (no trip yet, or a habit the trip data does not cover).
+        val quests = listOf(
+            Quest(Icon.GAUGE, "살살 출발", "급가속 없이", p?.let { it.accelEvents == 0 }),
+            if (electric) {
+                Quest(Icon.PIN, "추천 들르기", "지나치지 않기", null)
+            } else {
+                Quest(Icon.POWER, "시동 끄기", "공회전 3분 이내", p?.let { it.idleEvalSeconds == 0L })
+            },
+            Quest(Icon.LIMIT, "제한속도", "과속 없이", p?.let { it.speedingKm.signum() == 0 }),
+        )
+        questTiles.zip(quests).forEach { (t, q) ->
+            val done = q.done == true || (questPreview && q.done == null && q.icon != Icon.PIN)
+            t.icon.setImageDrawable(IconDrawable(q.icon, palette.accent, dp(if (wide) 52 else 32)))
+            t.name.text = q.name
+            t.line.text = if (done) "달성" else q.rule
+            t.line.setTextColor(if (done) palette.text else palette.text2)
+            t.line.typeface = Pleos.typeface(if (done) 600 else 400)
+            t.line.setIcon(if (done) Icon.CHECK else null, palette.accent, 24)
+            t.line.compoundDrawablePadding = dp(6)
+            t.root.contentDescription = "퀘스트 ${q.name}, ${q.rule}" + if (done) ", 달성" else ""
+        }
+    }
+
+    private class Quest(val icon: Icon, val name: String, val rule: String, val done: Boolean?)
+
+    private class QuestTile(val root: LinearLayout, val icon: ImageView, val words: LinearLayout, val name: TextView, val line: TextView)
+
+    /**
+     * The rings' size in the wide window: larger while only the quests are under them, and back to the usual size with
+     * the last trip's card, so both fit on the screen. The narrow window keeps one size.
      */
     private fun sizeRings(compact: Boolean) {
         if (compact == ringsCompact) return
         ringsCompact = compact
-        val design = if (wide) (if (compact) 232 else 288) else (if (compact) 196 else 232)
+        val design = if (wide) (if (compact) 232 else 288) else 196
         val size = minOf(design, ringColumnDp - 8).coerceAtLeast(120)
         // The number in the middle and the title above grow with the ring (the number still shrinks to fit a long value).
         val large = size >= 272
@@ -1159,7 +1206,19 @@ class MainActivity : Activity() {
         val large = glassPad(Depth.LARGE)
         val cardPad = dp(if (wide) 32 else 24) + large
         listOf(askCard, recCard, routeCard, tripCard).forEach { it.root.setPadding(cardPad, cardPad, cardPad, cardPad) }
-        celebration.setPadding(cardPad, cardPad, cardPad, cardPad)
+        listOf(celebration, questPanel).forEach { it.setPadding(cardPad, cardPad, cardPad, cardPad) }
+        // Quests: a picture over its words in the wide window, beside them in the narrow one.
+        questTiles.forEach { t ->
+            t.root.orientation = if (wide) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            t.root.gravity = if (wide) Gravity.CENTER_HORIZONTAL else Gravity.CENTER_VERTICAL
+            val size = dp(if (wide) 96 else 56)
+            t.icon.layoutParams = LinearLayout.LayoutParams(size, size)
+            t.words.gravity = if (wide) Gravity.CENTER_HORIZONTAL else Gravity.START
+            t.words.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                if (wide) topMargin = dp(12) else marginStart = dp(12)
+            }
+        }
+        renderedQuests = null
         val dashPad = dp(if (wide) 28 else 20) + large
         dashboard.setPadding(dashPad, dashPad, dashPad, dashPad)
         // Three rings side by side: as large as the design asks, never wider than a third of the panel.
@@ -1466,7 +1525,7 @@ class MainActivity : Activity() {
         routeCard.footer.addView(button("확인", Kind.PRIMARY) { controller?.closeRoutes() }, LinearLayout.LayoutParams(dp(240), ViewGroup.LayoutParams.WRAP_CONTENT))
         askCard.footer.visibility = View.GONE
 
-        // With no decision open: the level-up, the dashboard, then the last trip.
+        // With no decision open: the level-up, the dashboard, then the last trip or the driving-habit quests.
         idleStack = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
@@ -1533,6 +1592,38 @@ class MainActivity : Activity() {
         tripCard = card()
         tripCard.footer.visibility = View.GONE
         idleStack.addView(tripCard.root, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+        // What to try on the next drive: three driving habits as quests.
+        questPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = glass(Depth.LARGE)
+            visibility = View.GONE
+        }
+        questPanel.addView(label(Type.LABEL1_STRONG, palette.text2).apply { text = "운전 습관 퀘스트" })
+        val questRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        questTiles = List(3) {
+            val icon = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER
+                background = glass(depth = null, corner = 999f)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            val name = label(Type.BODY2_STRONG)
+            val line = label(Type.LABEL1, palette.text2)
+            // Each line is as wide as its words, so the pair centres under the picture in the wide window.
+            val words = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(name, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }
+            val tile = LinearLayout(this).apply {
+                addView(icon)
+                addView(words)
+            }
+            questRow.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            QuestTile(tile, icon, words, name, line)
+        }
+        questPanel.addView(questRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
+        idleStack.addView(questPanel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         listOf(askCard, recCard, routeCard).forEach { slot.addView(it.root) }
         // When the cards are taller than the room (a narrow window), the bottom edge fades to say there is more below.

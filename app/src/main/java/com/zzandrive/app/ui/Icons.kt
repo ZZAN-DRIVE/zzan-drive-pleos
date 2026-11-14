@@ -12,11 +12,11 @@ import kotlin.math.abs
 import kotlin.math.sin
 
 /** The app's own line icons, drawn on a 24 × 24 grid: a word less to read wherever a picture says it. */
-enum class Icon { MIC, MIC_OFF, BELL, BARS, CHECK, INFO, PIN_OFF, CHEVRON, UP, DOWN, PARK, DRIVE, BOLT, DROP }
+enum class Icon { MIC, MIC_OFF, BELL, BARS, CHECK, INFO, PIN, PIN_OFF, CHEVRON, UP, DOWN, PARK, DRIVE, BOLT, DROP, GAUGE, POWER, LIMIT }
 
 /**
  * One [Icon] in one colour, [sizePx] square. Strokes are 2/24 of the size with round ends; BOLT, DROP, UP and DOWN
- * are filled; PARK and DRIVE are the gear's letter in a ring.
+ * are filled; PARK and DRIVE are the gear's letter in a ring, LIMIT a speed-limit sign.
  */
 class IconDrawable(private val kind: Icon, tint: Int, private val sizePx: Int) : Drawable() {
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -113,15 +113,40 @@ class IconDrawable(private val kind: Icon, tint: Int, private val sizePx: Int) :
                 canvas.drawPath(path, stroke)
                 canvas.drawCircle(12f, 7.6f, 1.3f, solid)
             }
-            Icon.PIN_OFF -> {
+            Icon.PIN, Icon.PIN_OFF -> {
                 path.moveTo(12f, 21f)
                 path.cubicTo(12f, 21f, 5.5f, 15f, 5.5f, 10f)
                 box.set(5.5f, 3.5f, 18.5f, 16.5f)
                 path.arcTo(box, 180f, 180f)
                 path.cubicTo(18.5f, 15f, 12f, 21f, 12f, 21f)
-                path.moveTo(4f, 4f)
-                path.lineTo(20f, 20f)
+                if (kind == Icon.PIN_OFF) {
+                    path.moveTo(4f, 4f)
+                    path.lineTo(20f, 20f)
+                }
                 canvas.drawPath(path, stroke)
+                if (kind == Icon.PIN) canvas.drawCircle(12f, 10f, 2.4f, stroke)
+            }
+            // A speedometer: the dial open at the bottom, the needle at rest on the low side.
+            Icon.GAUGE -> {
+                box.set(3f, 4f, 21f, 22f)
+                path.arcTo(box, 150f, 240f, true)
+                path.moveTo(12f, 13f)
+                path.lineTo(7.8f, 9.6f)
+                canvas.drawPath(path, stroke)
+                canvas.drawCircle(12f, 13f, 1.4f, solid)
+            }
+            // The power sign: the engine off.
+            Icon.POWER -> {
+                box.set(4f, 5f, 20f, 21f)
+                path.arcTo(box, -60f, 300f, true)
+                path.moveTo(12f, 3.5f)
+                path.lineTo(12f, 12f)
+                canvas.drawPath(path, stroke)
+            }
+            Icon.LIMIT -> {
+                canvas.drawCircle(12f, 12f, 10f, stroke)
+                letter.textSize = 10.5f
+                canvas.drawText("50", 12f, 15.8f, letter)
             }
             Icon.CHEVRON -> {
                 path.moveTo(9f, 6f)
