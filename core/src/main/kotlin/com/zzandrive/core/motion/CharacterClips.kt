@@ -1,20 +1,23 @@
 package com.zzandrive.core.motion
 
 /**
- * What a clip is for. Looping clips are the resting state of a level; the others play once and
- * hand back to it (spec 7.1 레벨표 "캐릭터 모습", D-18).
+ * What a clip is for (spec 7.1 레벨표 "캐릭터 모습", D-18). Whether it loops is up to the player: the resting clip of a
+ * level loops, the others play once and hand back to it.
  */
-enum class ClipKind(val loops: Boolean) {
-    IDLE(true),
-    HOLD(true),
-    SAD(true),
-    EAT(false),
-    LEVEL_UP(false),
-    HAPPY(false),
+enum class ClipKind {
+    IDLE,
+    HOLD,
+    SAD,
+    EAT,
+    LEVEL_UP,
+    HAPPY,
 }
 
-/** One animation file. [level] is set for food clips (eat/hold) only. */
-data class Clip(val path: String, val kind: ClipKind, val level: Int? = null) {
+/**
+ * One animation file. [level] is set for food clips (eat/hold) only. [bolt] is how full the bolt above the head is drawn
+ * in the file, in % (`_bolt100`), when the name says so (spec D-40).
+ */
+data class Clip(val path: String, val kind: ClipKind, val level: Int? = null, val bolt: Int? = null) {
     val name: String get() = path.substringAfterLast('/')
 }
 
@@ -23,9 +26,12 @@ data class Clip(val path: String, val kind: ClipKind, val level: Int? = null) {
  * so a screen swaps files in one place. Roles come from the file names:
  *
  * - `<any>_idle.webp`, `<any>_levelup.webp`, `<any>_happy.webp`, `<any>_sad.webp`
- * - `<any>_lv<N>_<food>_eat.webp` (plays once), `<any>_lv<N>_<food>_hold.webp` (loops)
+ * - `<any>_lv<N>_<food>_eat.webp`, `<any>_lv<N>_<food>_hold.webp`
+ * - the same with the art's bolt and version, `<any>_lv<N>_<food>_eat_bolt<NNN>_v<N>.webp`, and a level's clip without
+ *   a verb, `<any>_lv<N>_<food>_bolt<NNN>[_v<N>].webp` (level 0's empty wallet), which counts as its eating clip
  *
- * Other names are ignored, so new levels and the second character drop in without code changes.
+ * Several files for one role (bolt steps, versions) resolve to the fullest bolt, then the newest version. Other names are
+ * ignored, so new levels and the second character drop in without code changes.
  */
 class CharacterClips private constructor(
     val clips: List<Clip>,
@@ -40,32 +46,47 @@ class CharacterClips private constructor(
     fun hold(level: Int): Clip? = find(ClipKind.HOLD, level)
     fun eat(level: Int): Clip? = find(ClipKind.EAT, level)
 
-    /** The loop shown at [level]: holding that level's food, otherwise the plain idle. */
-    fun base(level: Int): Clip? = hold(level) ?: idle()
+    /** The loop shown at [level]: holding that level's food, else eating it (the v23 art eats in a loop), else the plain idle. */
+    fun base(level: Int): Clip? = hold(level) ?: eat(level) ?: idle()
 
-    /** Level-up scene: the celebration, then eating the new level's food when that clip exists. */
-    fun levelUp(level: Int): List<Clip> = listOfNotNull(find(ClipKind.LEVEL_UP), eat(level))
+    /**
+     * Level-up scene: the celebration, then eating the new food once when the level rests on holding it. When the level
+     * rests on eating, the celebration hands straight over to that loop.
+     */
+    fun levelUp(level: Int): List<Clip> = listOfNotNull(find(ClipKind.LEVEL_UP), eat(level).takeIf { hold(level) != null })
 
-    /** A tap on the character: eat the current food, or a happy hop when the level has no food clip. */
-    fun tap(level: Int): Clip? = eat(level) ?: find(ClipKind.HAPPY)
+    /** A tap on the character: eat the food once when the level rests on holding it, otherwise a happy hop. */
+    fun tap(level: Int): Clip? = eat(level).takeIf { hold(level) != null } ?: find(ClipKind.HAPPY)
 
     /** After a settlement: happy when a saving was credited, sad when it was not. */
     fun reaction(happy: Boolean): Clip? = find(if (happy) ClipKind.HAPPY else ClipKind.SAD)
 
+    /** A still for choosing the character: the plain idle (level 0 rests on the empty wallet, with a sad face). */
+    fun portrait(): Clip? = idle() ?: base(0)
+
     companion object {
         val EMPTY = CharacterClips(emptyList(), borrowed = false)
 
-        private val FOOD = Regex("""^.+_lv(\d{1,2})_[a-z0-9]+_(eat|hold)\.webp$""")
+        private val FOOD = Regex("""^.+_lv(\d{1,2})_[a-z0-9]+_(eat|hold)(?:_bolt(\d{3}))?(?:_v(\d+))?\.webp$""")
+        private val LEVEL = Regex("""^.+_lv(\d{1,2})_[a-z0-9]+_bolt(\d{3})(?:_v(\d+))?\.webp$""")
         private val PLAIN = Regex("""^.+_(idle|levelup|happy|sad)\.webp$""")
 
-        /** Clips found in [dir] (an asset folder) among [names]. Sorted, so duplicates resolve the same way every time. */
+        /** Fullest bolt first, then the newest version, then by name: duplicates resolve the same way every time. */
+        private val PREFERRED = compareByDescending<Pair<Clip, Int>> { it.first.bolt ?: -1 }
+            .thenByDescending { it.second }
+            .thenBy { it.first.name }
+
+        /** Clips found in [dir] (an asset folder) among [names]. */
         fun parse(dir: String, names: Collection<String>): CharacterClips {
             val folder = dir.trimEnd('/')
-            val clips = names.sorted().mapNotNull { name ->
+            val found = names.mapNotNull { name ->
                 val path = "$folder/$name"
                 FOOD.matchEntire(name)?.let { m ->
                     val kind = if (m.groupValues[2] == "eat") ClipKind.EAT else ClipKind.HOLD
-                    return@mapNotNull Clip(path, kind, m.groupValues[1].toInt())
+                    return@mapNotNull Clip(path, kind, m.groupValues[1].toInt(), m.groupValues[3].toIntOrNull()) to version(m.groupValues[4])
+                }
+                LEVEL.matchEntire(name)?.let { m ->
+                    return@mapNotNull Clip(path, ClipKind.EAT, m.groupValues[1].toInt(), m.groupValues[2].toInt()) to version(m.groupValues[3])
                 }
                 PLAIN.matchEntire(name)?.let { m ->
                     val kind = when (m.groupValues[1]) {
@@ -74,11 +95,13 @@ class CharacterClips private constructor(
                         "happy" -> ClipKind.HAPPY
                         else -> ClipKind.SAD
                     }
-                    Clip(path, kind)
+                    Clip(path, kind) to 0
                 }
             }
-            return CharacterClips(clips, borrowed = false)
+            return CharacterClips(found.sortedWith(PREFERRED).map { it.first }, borrowed = false)
         }
+
+        private fun version(digits: String): Int = digits.toIntOrNull() ?: 0
 
         /**
          * The chosen character's clips. When it has none yet, [fallback]'s clips marked [borrowed]

@@ -54,6 +54,7 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
     private var persona: Persona? = null
     private var clips: CharacterClips = CharacterClips.EMPTY
     private var level = 0
+    private var portrait = false // a picture for choosing the character, not a level
     private val queue = ArrayDeque<Clip>()
     private var current: Clip? = null // on the front layer, or being decoded for it
     private var currentOnce = false
@@ -73,6 +74,12 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
     fun setCharacter(persona: Persona, level: Int) {
         use(persona, level)
         if (!busy) showRest()
+    }
+
+    /** [persona] for choosing it: the plain idle, not level 0's empty wallet (a sad face). */
+    fun setPortrait(persona: Persona) {
+        portrait = true
+        setCharacter(persona, 0)
     }
 
     /**
@@ -137,7 +144,7 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
     }
 
     private fun showRest() {
-        val rest = clips.base(level) ?: return
+        val rest = (if (portrait) clips.portrait() else clips.base(level)) ?: return
         if (rest == current && !currentOnce) return // already looping it
         show(rest, once = false)
     }

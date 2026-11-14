@@ -4,6 +4,8 @@
 *.iml
 .vscode/*
 !.vscode/extensions.json
+# VS Code's Java extension compiles the pure-JVM modules into <module>/bin/
+bin/
 
 # Gradle / Android
 .gradle/

@@ -154,8 +154,7 @@ play_b() {
   check "level-up line" "^SAY 짜장면 레벨 달성! 파스타까지 약 5,700원 남았어" 10
   check "level-up screen" "^SHOW level-up 3" 10
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
-  check "eats 짜장면" "^CLIP .*_lv3_[a-z0-9]+_eat\.webp" 15
-  check "holds 짜장면" "^CLIP .*_lv3_[a-z0-9]+_hold\.webp" 15
+  check "eats 짜장면" "^CLIP .*_lv0?3_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
   hold 3
   record_stop
 }
@@ -290,10 +289,9 @@ play_b_auto() {
   check "settled 2,323원 → level 3" "^SETTLE amount=2323 level=3 accrual=1323 remaining=5677" 10
   check "level-up line" "^SAY 짜장면 레벨 달성! 파스타까지 약 5,700원 남았어" 10
   check "level-up screen" "^SHOW level-up 3" 10
-  # The character celebrates in place, then eats the new food and keeps holding it.
+  # The character celebrates in place, then eats the new food in a loop.
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
-  check "eats 짜장면" "^CLIP .*_lv3_[a-z0-9]+_eat\.webp" 15
-  check "holds 짜장면" "^CLIP .*_lv3_[a-z0-9]+_hold\.webp" 15
+  check "eats 짜장면" "^CLIP .*_lv0?3_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
   hold 3
   record_stop
 }
@@ -342,8 +340,7 @@ play_a() {
   check "after parking: level-up" "^SAY 삼각김밥 레벨 달성! 아메리카노까지 약 2,300원 남았어" 20
   check "level-up screen" "^SHOW level-up 1" 10
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
-  check "eats 삼각김밥" "^CLIP .*_lv1_[a-z0-9]+_eat\.webp" 15
-  check "holds 삼각김밥" "^CLIP .*_lv1_[a-z0-9]+_hold\.webp" 15
+  check "eats 삼각김밥" "^CLIP .*_lv0?1_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
   hold 3
   record_stop
   app_front --es zzan.demo off
@@ -494,6 +491,7 @@ play_levels() {
       check "level $n screen" "^SHOW level-up $n\$" 10
       check "level $n line" "^SAY ${LEVEL_FOODS[$n]} 레벨 달성" 10
       check "level $n clip" "^CLIP .*_levelup\.webp" 10
+      check "level $n eats ${LEVEL_FOODS[$n]}" "^CLIP .*_lv0*${n}_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
     fi
     hold 3
     # ZZAN_SHOTS_DIR=dir saves one screenshot per level (for documents and video thumbnails).

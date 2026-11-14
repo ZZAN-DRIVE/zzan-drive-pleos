@@ -1548,7 +1548,7 @@ class MainActivity : Activity() {
             }
             val still = CharacterStageView(this).apply {
                 motionAllowed = false
-                setCharacter(p, 0)
+                setPortrait(p)
             }
             col.addView(still, LinearLayout.LayoutParams(dp(300), dp(300)))
             col.addView(label(Type.LABEL1, palette.text3, center = true).apply { text = if (still.borrowed) "그림 준비 중" else " " })
