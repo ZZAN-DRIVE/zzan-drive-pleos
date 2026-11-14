@@ -13,8 +13,8 @@ import com.zzandrive.data.api.GeoPoint
 
 /**
  * Hands an approved recommendation to the Pleos navigation app (spec R-20: only after the driver's "응").
- * On the 2.1.0 emulator the navigation engine returns fixed distance/time, so this proves the hand-off,
- * not real routing.
+ * On the 2.1.0 emulator the navigation app then calculates and shows a route to that place (it draws no base map
+ * there). This app does not read the route's distance or time back.
  */
 class PleosNavigator(context: Context) {
     private val navi = NaviHelper(context.applicationContext)
