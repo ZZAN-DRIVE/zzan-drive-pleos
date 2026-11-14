@@ -29,8 +29,13 @@ data class Recommendation(
     val referenceName: String? = null,
     /** How the amount was answered, for the screen ("40kWh", "1만 원", "건너뜀"). */
     val fillLabel: String? = null,
-    /** Unit price the trip is valued at when the price is left out (ROUTE_ONLY / NEAREST_ONLY / ON_ROUTE). */
+    /**
+     * Unit price the trip is valued at when the price is left out (ROUTE_ONLY / NEAREST_ONLY / ON_ROUTE), and the
+     * 기준 단가 of a whole-route comparison (ROUTE_TOTAL).
+     */
     val travelPrice: BigDecimal? = null,
+    /** Won per hour the driving time was valued at (ROUTE_TOTAL); frozen here so a later setting change cannot move a credit. */
+    val wagePerHour: BigDecimal? = null,
 ) {
     val best: CostBreakdown get() = ranked.first()
 
@@ -42,6 +47,7 @@ data class Recommendation(
         get() = when (creditRule) {
             CreditRule.VS_NEAREST -> baseline
             CreditRule.VS_WORST -> worst
+            CreditRule.VS_NO_STOP -> ranked.firstOrNull { it.offer.id == RoutePolicy.NO_STOP_ID }
             CreditRule.NONE -> null
         }
 
@@ -50,6 +56,13 @@ data class Recommendation(
 
     /** True when the nearest station is already the cheapest, so there is nothing to suggest. */
     val recommendsBaseline: Boolean get() = best.offer.id == baseline.offer.id
+
+    /** True when the best choice is to go on without a stop (spec D-34): nothing to approve, nothing to credit. */
+    val noStop: Boolean get() = best.offer.id == RoutePolicy.NO_STOP_ID
+
+    /** What [offer] costs at [quantity] by the formula this recommendation compared with (V-09). */
+    fun cost(offer: StationOffer, quantity: BigDecimal): CostBreakdown =
+        CostCalculator.cost(mode, quantity, offer, efficiency.kmPerUnit, travelPrice, wagePerHour)
 }
 
 /** Where the request comes from (기획서 p.4~5, 3-1-1). */
@@ -62,6 +75,12 @@ sealed interface PlanContext {
 
     /** ②-1·③: a stop is unavoidable; offers are the reachable ones. */
     data class MustStop(val branch: RouteBranch) : PlanContext
+
+    /**
+     * 목적지가 있는 경로 추천 (기획 계산식, spec D-32..D-34): offers are the stations within range, each with its whole
+     * route. [noStop] is the "주유 없이 가기" row when the destination itself is within range, null when it is not.
+     */
+    data class Destination(val noStop: StationOffer?) : PlanContext
 }
 
 data class PlanRequest(
@@ -77,8 +96,10 @@ data class PlanRequest(
     val referenceName: String? = null,
     val fillLabel: String? = null,
     val issueLocation: GeoPoint? = null,
-    /** The survey average price (p.5 표) used when the price is left out. */
+    /** The survey average price (p.5 표): used when the price is left out, and as the 기준 단가 of a whole-route comparison. */
     val travelPrice: BigDecimal = PlanReference.survey(energyType).unitPrice,
+    /** Won per hour for the 시간비용 of a whole-route comparison. */
+    val wagePerHour: BigDecimal = PlanReference.TIME_VALUE_PER_HOUR,
 )
 
 object Recommender {
@@ -122,6 +143,7 @@ object Recommender {
             issueLocation = r.issueLocation, mode = mode, creditRule = rule, excludedIds = excluded.map { it.id },
             referenceName = r.referenceName, fillLabel = r.fillLabel,
             travelPrice = if (mode == CompareMode.COST_INCLUDED) null else r.travelPrice,
+            wagePerHour = if (mode == CompareMode.ROUTE_TOTAL) r.wagePerHour else null,
         )
 
         return when (val c = r.context) {
@@ -156,6 +178,31 @@ object Recommender {
                     build(BigDecimal.ZERO, compatible.map(::travel), CompareMode.ROUTE_ONLY, CreditRule.NONE)
                 } else {
                     build(quantity, compatible.map { CostCalculator.realCost(quantity, it, e) }, CompareMode.COST_INCLUDED, CreditRule.VS_WORST)
+                }
+            }
+            is PlanContext.Destination -> {
+                // Without whole-route numbers for every candidate the comparison falls back to the detour-based one.
+                if (compatible.any { it.route == null }) return plan(r.copy(context = PlanContext.MustStop(RouteBranch.UNREACHABLE)))
+                val quantity = FillPolicy.quantity(r.fill, r.room, CandidatePolicy.nearest(compatible)!!.unitPrice)
+                fun total(q: BigDecimal, o: StationOffer) = CostCalculator.routeTotal(q, o, e, r.travelPrice, r.wagePerHour)
+                when {
+                    // No amount: a price cannot be compared. Within range nothing is needed; out of range the trip only (D-25).
+                    quantity == null && c.noStop != null ->
+                        build(BigDecimal.ZERO, listOf(total(BigDecimal.ZERO, c.noStop)), CompareMode.ROUTE_TOTAL, CreditRule.NONE)
+                    quantity == null -> build(BigDecimal.ZERO, compatible.map(::travel), CompareMode.ROUTE_ONLY, CreditRule.NONE)
+                    c.noStop == null -> {
+                        // Out of range: station routes only, the three with the lowest total (기획 계산식 1).
+                        val shown = compatible.map { total(quantity, it) }.sortedWith(cheapestFirst).take(RoutePolicy.SHOWN)
+                        build(quantity, shown, CompareMode.ROUTE_TOTAL, if (shown.size >= 2) CreditRule.VS_WORST else CreditRule.NONE)
+                    }
+                    else -> {
+                        // Within range: going on without a stop is one of the routes (기획 계산식 2).
+                        val noStop = total(quantity, c.noStop)
+                        val shown = (compatible.map { total(quantity, it) }.sortedWith(cheapestFirst).take(RoutePolicy.SHOWN - 1) + noStop)
+                            .sortedWith(cheapestFirst)
+                        val rule = if (shown.first().offer.id == RoutePolicy.NO_STOP_ID) CreditRule.NONE else CreditRule.VS_NO_STOP
+                        build(quantity, shown, CompareMode.ROUTE_TOTAL, rule, baseline = noStop)
+                    }
                 }
             }
         }

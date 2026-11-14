@@ -12,6 +12,7 @@ import com.zzandrive.data.api.GeoPoint
 import com.zzandrive.data.api.LocationSample
 import com.zzandrive.data.api.PlaceSource
 import com.zzandrive.data.api.RouteChoices
+import com.zzandrive.data.api.RouteLeg
 import com.zzandrive.data.api.RouteOption
 import com.zzandrive.data.api.RouteSource
 import com.zzandrive.data.api.SavedPlace
@@ -72,6 +73,24 @@ object FixtureStations {
     /** Around the current location: the plan's four plus the two above (never in [ALL], which the fixed-amount flow uses). */
     val NEAR_HOME = ALL + listOf(EV_FAR, FUEL_C)
 
+    // ---- 강릉 가는 길 (시나리오 A): the planner's five-station example as whole routes (기획 계산식, spec D-32) ----
+
+    /** [km], [minutes], [toll]: the whole route from the rest stop through this station to 강릉. [ahead]: km to the station. */
+    private fun onTheWay(letter: String, price: String, km: String, minutes: String, toll: String, ahead: String, at: GeoPoint) = StationOffer(
+        id = "route-${letter.lowercase()}", name = "강릉길 $letter 주유소", energyType = EnergyType.GASOLINE,
+        unitPrice = BigDecimal(price), roundTripDetourKm = BigDecimal(km).subtract(BigDecimal("100")), location = at,
+        origin = DataOrigin.PLAN_EXAMPLE, roadKm = BigDecimal(ahead), aheadKm = BigDecimal(ahead), onRoute = true,
+        route = RouteLeg(BigDecimal(km), BigDecimal(minutes), BigDecimal(toll)),
+    )
+
+    val ROUTE_A = onTheWay("A", "1700", "100", "80", "3000", "12", GeoPoint(37.44500, 127.30000))
+    val ROUTE_B = onTheWay("B", "1660", "110", "100", "0", "18", GeoPoint(37.47000, 127.38000))
+    val ROUTE_C = onTheWay("C", "1640", "108", "90", "1000", "25", GeoPoint(37.50000, 127.47000))
+    val ROUTE_D = onTheWay("D", "1600", "115", "110", "0", "40", GeoPoint(37.55000, 127.65000))
+    val ROUTE_E = onTheWay("E", "1670", "120", "96", "0", "48", GeoPoint(37.58000, 127.74000))
+
+    val ON_THE_WAY = listOf(ROUTE_A, ROUTE_B, ROUTE_C, ROUTE_D, ROUTE_E)
+
     /** A saved place with nothing within 5 km of road (p.5 ⑤ "가장 가까운 … 1곳만"). */
     val PARENTS = GeoPoint(37.49100, 127.48800)
 
@@ -111,10 +130,11 @@ class FixtureStationSource(private val stations: List<StationOffer> = FixtureSta
 }
 
 /**
- * 시나리오 A (기획서 p.16~17): Seoul → 강릉 on a family trip, 220 km left (example data). With 6 L in a 60 L tank at
- * 10 km/L the car reaches 60 km, so a stop is unavoidable (③). The plan's two stations are along the way.
+ * 시나리오 A (기획서 p.16~17): Seoul → 강릉 on a family trip, 100 km left at the rest stop (example data). With 6 L in a
+ * 60 L tank at 15.3 km/L the car's range is 83 km, so a stop is unavoidable. The five stations ahead are the planner's
+ * example (기획 계산식): each has the whole route through it to 강릉.
  */
-class FixtureRouteSource(private val remainingKm: BigDecimal = BigDecimal("220")) : RouteSource {
+class FixtureRouteSource(private val remainingKm: BigDecimal = BigDecimal("100")) : RouteSource {
     /**
      * Three made-up routes to 강릉 for the departure comparison (예시 데이터, not a route API). At the default 5,000원
      * an hour the slower 국도 wins; at 10,000원 the 고속도로 does, so the wage setting visibly matters.
@@ -133,11 +153,10 @@ class FixtureRouteSource(private val remainingKm: BigDecimal = BigDecimal("220")
         if (energyType.isElectric) null else ActiveRoute(
             destinationName = "강릉",
             remainingKm = remainingKm,
-            stations = listOf(
-                FixtureStations.FUEL_A.copy(aheadKm = BigDecimal("1"), onRoute = false),
-                FixtureStations.FUEL_B.copy(aheadKm = BigDecimal("30"), onRoute = true),
-            ),
+            stations = FixtureStations.ON_THE_WAY,
             origin = DataOrigin.PLAN_EXAMPLE,
+            // The fastest way on without a stop is the route station A sits on.
+            noStop = RouteLeg(BigDecimal("100"), BigDecimal("80"), BigDecimal("3000")),
         )
 }
 
@@ -200,6 +219,45 @@ object Scenarios {
         TimedSample(300) { EnergySample(it, litres, litres / tankL * 100, tankL, O) },
     )
 
+    /**
+     * 시연 C (운전 습관, spec D-35..D-38): one fuel-car trip with every kind of waste, about 14 minutes of driving
+     * played in half a minute. The samples carry their own times (seconds into the trip), so the amounts do not depend
+     * on how fast the timeline is played: 8 minutes idling → a harsh start → a harsh acceleration → a hard brake
+     * (recorded only) → 6.25 km at 125 km/h under a 100 km/h limit → parked, engine off.
+     */
+    fun habitTrip(tankL: Double = 60.0, litres: Double = 40.0): List<TimedSample> {
+        var start: Long? = null
+        var wall = 0L
+        val out = mutableListOf<TimedSample>()
+        fun at(sec: Int, afterMs: Long, parked: Boolean, kmh: Double, engine: Boolean = true, limit: Int? = null) {
+            wall += afterMs
+            out += TimedSample(wall) { now ->
+                val t0 = start ?: now.also { start = it }
+                DriveSample(t0 + sec * 1000L, parked, if (parked) "P" else "D", O, speedKmh = kmh, engineOn = engine, speedLimitKmh = limit)
+            }
+        }
+        at(0, 0, parked = true, kmh = 0.0)
+        out += TimedSample(50) { LocationSample(it, FixtureStations.HOME, O) }
+        out += TimedSample(100) { EnergySample(it, litres, litres / tankL * 100, tankL, O) }
+        for (sec in 60..420 step 60) at(sec, 500, parked = true, kmh = 0.0) // idling in P: past 180 s at the 240 s sample
+        at(480, 3_500, parked = false, kmh = 0.0, limit = 50)
+        at(481, 400, parked = false, kmh = 14.0, limit = 50) // 급출발
+        at(482, 400, parked = false, kmh = 26.0, limit = 50) // the same acceleration
+        at(483, 400, parked = false, kmh = 30.0, limit = 50)
+        listOf(32.0, 34.0, 36.0, 38.0, 40.0, 40.0).forEachIndexed { i, v -> at(490 + i * 10, 400, parked = false, kmh = v, limit = 50) }
+        at(550, 400, parked = false, kmh = 40.0, limit = 50)
+        at(551, 400, parked = false, kmh = 50.0, limit = 50) // 급가속
+        at(552, 400, parked = false, kmh = 52.0, limit = 50)
+        at(560, 400, parked = false, kmh = 52.0, limit = 50)
+        at(561, 400, parked = false, kmh = 38.0, limit = 50) // 급감속: recorded only
+        listOf(70.0, 90.0, 105.0, 110.0, 110.0).forEachIndexed { i, v -> at(570 + i * 10, 400, parked = false, kmh = v, limit = 100) }
+        for (sec in 620..790 step 10) at(sec, 300, parked = false, kmh = 125.0, limit = 100) // 180 s over 100 × 1.1
+        listOf(100.0, 60.0, 30.0, 10.0).forEachIndexed { i, v -> at(800 + i * 10, 400, parked = false, kmh = v, limit = 100) }
+        at(840, 800, parked = true, kmh = 0.0)
+        at(843, 600, parked = true, kmh = 0.0, engine = false)
+        return out
+    }
+
     fun fuelLow(tankL: Double = 60.0, percent: Double = 10.0): List<TimedSample> = listOf(
         TimedSample(0) { DriveSample(it, parked = true, gear = "P", origin = O) },
         TimedSample(100) { LocationSample(it, FixtureStations.HOME, O) },
@@ -207,12 +265,18 @@ object Scenarios {
     )
 
     /**
-     * Arrive at B, fill [addL] litres, drive off (fuel cars give no charge hint, so leaving ends the
-     * refill), then park at home: the level-up celebration waits for that stop (spec R-46).
+     * Arrive at a station ([at], B by default), fill [addL] litres, drive off (fuel cars give no charge hint, so
+     * leaving ends the refill), then park at home: the level-up celebration waits for that stop (spec R-46).
      */
-    fun fuelRefillAtB(startL: Double = 6.0, addL: Double = 50.0, tankL: Double = 60.0, stepMs: Long = 1_500): List<TimedSample> = buildList {
+    fun fuelRefillAtB(
+        startL: Double = 6.0,
+        addL: Double = 50.0,
+        tankL: Double = 60.0,
+        stepMs: Long = 1_500,
+        at: GeoPoint = FixtureStations.FUEL_B.location!!,
+    ): List<TimedSample> = buildList {
         add(TimedSample(0) { DriveSample(it, parked = true, gear = "P", origin = O) })
-        add(TimedSample(100) { LocationSample(it, FixtureStations.FUEL_B.location!!, O) })
+        add(TimedSample(100) { LocationSample(it, at, O) })
         for (i in 1..5) {
             val l = startL + addL * i / 5
             add(TimedSample(300 + i * stepMs) { EnergySample(it, l, l / tankL * 100, tankL, O) })

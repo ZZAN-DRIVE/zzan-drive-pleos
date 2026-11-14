@@ -44,6 +44,7 @@ import com.zzandrive.core.domain.CharacterProgress
 import com.zzandrive.core.domain.CompareMode
 import com.zzandrive.core.domain.CreditRule
 import com.zzandrive.core.domain.RoutePlanner
+import com.zzandrive.core.domain.RoutePolicy
 import com.zzandrive.core.domain.TriggerPolicy
 import com.zzandrive.core.domain.toWon
 import com.zzandrive.core.voice.Josa
@@ -109,6 +110,7 @@ class MainActivity : Activity() {
     private lateinit var recDiff: TextView
     private lateinit var recOrigin: TextView
     private lateinit var recButtons: LinearLayout
+    private lateinit var adviceButton: android.widget.Button
     private lateinit var recCard: LinearLayout
     private lateinit var routeCard: LinearLayout
     private lateinit var routeTitle: TextView
@@ -274,6 +276,7 @@ class MainActivity : Activity() {
         when (which) {
             "B" -> bind(app.startDemo(DemoScenario.B_CHARGE).controller)
             "A" -> bind(app.startDemo(DemoScenario.A_FUEL).controller)
+            "C" -> bind(app.startDemo(DemoScenario.HABIT_FUEL).controller)
             else -> {
                 app.stopDemo()
                 if (!app.locationGranted) locationExplained = false // back to live data: offer the permission again
@@ -307,11 +310,12 @@ class MainActivity : Activity() {
         val covered = personaOverlay.visibility == View.VISIBLE || locationOverlay.visibility == View.VISIBLE ||
             noticeOverlay.visibility == View.VISIBLE || settingsOverlay.visibility == View.VISIBLE || resetOverlay.visibility == View.VISIBLE
 
-        // Above the character: today and this month's 손익 (negative as it is, R-35).
+        // Above the character: the cumulative saving (never below the amount the current level was reached at),
+        // then this month's and today's 손익 as they are, negative included (R-35).
         dateText.text = DATE.format(s.today)
-        monthAmount.text = signed(s.monthNetWon)
-        monthAmount.setTextColor(amountColor(s.monthNetWon))
-        todayText.text = "오늘 ${signed(s.todayNetWon)}"
+        monthAmount.text = WonFormat.screen(s.totalSavedWon)
+        todayText.text = "이번 달 ${signed(s.monthNetWon)} · 오늘 ${signed(s.todayNetWon)}"
+        todayText.setTextColor(if (s.monthNetWon < 0 || s.todayNetWon < 0) palette.negative else palette.muted)
 
         // The character moves only while parked (R-46); the system blocks this screen while driving.
         stage.logTag = tag
@@ -349,7 +353,8 @@ class MainActivity : Activity() {
         levelBar.max = if (s.remainingWon == null) 1 else target.toInt().coerceAtLeast(1)
         levelBar.progress = if (s.remainingWon == null) 1 else s.character.accrualWon.toInt()
         remainingText.text = s.remainingWon?.let { "${progress.nextFood(charLevel)}까지 ${WonFormat.screen(it)}" } ?: "최고 레벨이야"
-        totalText.text = "적립 ${WonFormat.screen(s.character.accrualWon)} · 누적 ${WonFormat.screen(s.totalSavedWon)}"
+        totalText.text = "이번 레벨 ${WonFormat.screen(s.character.accrualWon)}" +
+            if (s.remainingWon != null) " / ${WonFormat.screen(target)}" else ""
 
         // The car's state, in the rail: what a driver needs, nothing a developer reads.
         val level = if (s.energyType.isElectric) {
@@ -375,6 +380,7 @@ class MainActivity : Activity() {
 
         val cardOpen = renderAsk(s) || renderRecommendation(s, s.energyType.unit) || renderRoutes(s)
         resultText.text = s.lastResult ?: ""
+        resultText.setTextColor(if (s.resultIsLoss) palette.negative else palette.good)
         resultText.visibility = if (s.lastResult == null) View.GONE else View.VISIBLE
         bubble.text = s.lastLine?.let { "“$it”" } ?: ""
         // While the microphone is open the badge shows "듣는 중…", even in a narrow window.
@@ -426,19 +432,27 @@ class MainActivity : Activity() {
      * numbers come from. Open while a decision or a trip is open; afterwards it folds into the result line.
      */
     private fun renderRecommendation(s: UiState, unit: String): Boolean {
-        val rec = s.recommendation
-        val open = rec != null && (s.approval == Approval.WAITING || s.approval == Approval.APPROVED)
-        recCard.visibility = if (open) View.VISIBLE else View.GONE
-        side.visibility = if (open) View.VISIBLE else View.GONE
-        if (!open || rec == null) return false
+        val decision = s.recommendation?.takeIf { s.approval == Approval.WAITING || s.approval == Approval.APPROVED }
+        // "No stop needed" (spec D-34) uses the same card with a single [확인]; a decision card comes first.
+        val rec = decision ?: s.advice
+        recCard.visibility = if (rec != null) View.VISIBLE else View.GONE
+        side.visibility = if (rec != null) View.VISIBLE else View.GONE
+        if (rec == null) return false
         routeCard.visibility = View.GONE
         val saving = rec.expectedSaving.toWon()
         val best = rec.best.offer
+        val whole = rec.mode == CompareMode.ROUTE_TOTAL
         recTitle.text = when (rec.mode) {
             CompareMode.COST_INCLUDED -> when {
                 rec.recommendsBaseline -> "${Josa.ga(if (best.name.startsWith("가까운")) best.name else "가까운 ${best.name}")} 가장 싸요"
                 rec.creditRule == CreditRule.VS_WORST -> "${Josa.ga(best.name)} ${WonFormat.screen(saving)} 덜 들어요"
                 else -> "${Josa.ga(best.name)} ${WonFormat.screen(saving)} 이득"
+            }
+            CompareMode.ROUTE_TOTAL -> when {
+                rec.noStop -> "지금은 안 들러도 돼요"
+                rec.creditRule == CreditRule.VS_NO_STOP -> "${best.name}에 들르면 ${WonFormat.screen(saving)} 덜 들어요"
+                rec.comparison == null -> "갈 수 있는 곳은 ${best.name}뿐이에요"
+                else -> "${Josa.ga(best.name)} ${WonFormat.screen(saving)} 덜 들어요"
             }
             CompareMode.ROUTE_ONLY -> "가까운 순으로 봤어요"
             CompareMode.NEAREST_ONLY -> "5km 안에는 없어요"
@@ -446,32 +460,61 @@ class MainActivity : Activity() {
         }
         recPlan.text = listOfNotNull(
             "예상".takeIf { rec.creditRule != CreditRule.NONE && !rec.recommendsBaseline }, // the title stays one phrase
-            rec.referenceName?.let { "기준 위치: $it" },
+            "시간비용 포함".takeIf { whole },
+            rec.referenceName?.takeIf { !whole }?.let { "기준 위치: $it" },
             rec.fillLabel?.let { "넣을 양: $it" } ?: "넣을 양: ${rec.plannedQuantity.stripTrailingZeros().toPlainString()}$unit",
+            rec.wagePerHour?.let { "시급 ${WonFormat.screen(it.toWon())}" },
         ).joinToString(" · ")
-        val withPrice = rec.mode == CompareMode.COST_INCLUDED
         recTable.removeAllViews()
-        recTable.addView(if (withPrice) row(true, "장소", "도로 거리", "단가", "합계") else row(true, "장소", "도로 거리", "단가"))
-        rec.ranked.take(3).forEach { c ->
-            val tag = when {
-                c.offer.id == best.id -> "추천"
-                c.offer.id == rec.baseline.offer.id -> "가장 가까움"
-                else -> null
+        if (whole) {
+            // 기획 계산식: each route's whole spend, the lowest as 0원 and the others as what they lose against it.
+            recTable.addView(row(true, "장소", "단가", "거리·시간", "총 지출"))
+            rec.ranked.take(3).forEach { c ->
+                val stop = c.offer.id != RoutePolicy.NO_STOP_ID
+                val name = c.offer.name + if (c.offer.id == best.id) "\n[추천]" else ""
+                val price = if (stop) "${WonFormat.screen(c.offer.unitPrice.toWon())}/$unit" else "–"
+                val leg = c.offer.route
+                val trip = leg?.let {
+                    "${it.km.stripTrailingZeros().toPlainString()}km · ${duration(it.minutes.toInt())}" +
+                        if (it.tollWon.signum() > 0) "\n통행료 ${WonFormat.screen(it.tollWon.toWon())}" else ""
+                } ?: "–"
+                val diff = rec.best.total.subtract(c.total).toWon()
+                val total = WonFormat.screen(c.total.toWon()) + "\n" + if (diff == 0L) "기준 0원" else "−${WonFormat.screen(-diff)}"
+                recTable.addView(row(false, name, price, trip, total))
             }
-            val name = c.offer.name + (tag?.let { "\n[$it]" } ?: "")
-            val km = "${c.offer.oneWayKm.setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()}km"
-            val price = "${WonFormat.screen(c.offer.unitPrice.toWon())}/$unit"
-            recTable.addView(if (withPrice) row(false, name, km, price, WonFormat.screen(c.total.toWon())) else row(false, name, km, price))
+        } else {
+            val withPrice = rec.mode == CompareMode.COST_INCLUDED
+            recTable.addView(if (withPrice) row(true, "장소", "도로 거리", "단가", "합계") else row(true, "장소", "도로 거리", "단가"))
+            rec.ranked.take(3).forEach { c ->
+                val tag = when {
+                    c.offer.id == best.id -> "추천"
+                    c.offer.id == rec.baseline.offer.id -> "가장 가까움"
+                    else -> null
+                }
+                val name = c.offer.name + (tag?.let { "\n[$it]" } ?: "")
+                val km = "${c.offer.oneWayKm.setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()}km"
+                val price = "${WonFormat.screen(c.offer.unitPrice.toWon())}/$unit"
+                recTable.addView(if (withPrice) row(false, name, km, price, WonFormat.screen(c.total.toWon())) else row(false, name, km, price))
+            }
         }
         // In "nearest one only" the shown place is itself past 5 km, so the excluded count would mislead.
         val excluded = if (rec.mode == CompareMode.NEAREST_ONLY) 0 else rec.excludedIds.size
         recDiff.text = if (excluded > 0) "도로로 5km 넘는 ${excluded}곳은 뺐어요" else ""
         recDiff.visibility = if (excluded > 0) View.VISIBLE else View.GONE
-        recOrigin.text = (
-            if (rec.creditRule == CreditRule.NONE) "가격을 비교하지 않은 안내라 절약액은 쌓이지 않아요."
-            else "예상치예요. 차가 넣은 양을 확인해야 쌓여요."
-            ) + "\n가격·도로 거리: ${best.origin.label}"
-        recButtons.visibility = if (s.approval == Approval.WAITING) View.VISIBLE else View.GONE
+        val efficiency = "${if (rec.energyType.isElectric) "전비" else "연비"} " +
+            "${rec.efficiency.kmPerUnit.stripTrailingZeros().toPlainString()}km/$unit: ${rec.efficiency.origin.label}"
+        recOrigin.text = when {
+            rec.noStop -> "남은 ${if (rec.energyType.isElectric) "배터리" else "연료"}로 목적지까지 갈 수 있고, 들르지 않는 편이 덜 들어요."
+            rec.creditRule == CreditRule.NONE -> "가격을 비교하지 않은 안내라 절약액은 쌓이지 않아요."
+            else -> "예상치예요. 차가 넣은 양을 확인해야 쌓여요."
+        } + "\n" + if (whole) {
+            "총 지출 = 전체 주행 연료비(기준 단가) + 넣을 양 × (이곳 단가 − 기준 단가) + 통행료 + 주행 시간 × 시급\n" +
+                "기준 단가 ${rec.travelPrice?.let { WonFormat.screen(it, 2) }}/$unit: ${DataOrigin.SURVEY.label} · $efficiency · 가격·경로: ${best.origin.label}"
+        } else {
+            "가격·도로 거리: ${best.origin.label} · $efficiency"
+        }
+        recButtons.visibility = if (decision != null && s.approval == Approval.WAITING) View.VISIBLE else View.GONE
+        adviceButton.visibility = if (decision == null) View.VISIBLE else View.GONE
         return true
     }
 
@@ -511,10 +554,10 @@ class MainActivity : Activity() {
                 if (r.toll.signum() > 0) "\n(통행료 ${WonFormat.screen(r.toll.toWon())} 포함)" else ""
             routeTable.addView(row(false, name, trip, cost, WonFormat.screen(r.value.toWon())))
         }
-        routeNote.text = "시간 포함 = 운행비 + 걸리는 시간 × 시급. 비교에만 쓰고 절약액으로 쌓지 않아요.\n" +
+        routeNote.text = "시간 포함 = 운행비 + 걸리는 시간 × 시급. 이 비교는 절약액으로 쌓지 않아요.\n" +
             when {
-                allStop -> "어느 길로 가도 도착 전에 알림 기준(${s.threshold}%) 아래로 내려가요. 가는 길 " +
-                    "${if (s.energyType.isElectric) "충전소" else "주유소"}를 넣은 비교는 준비 중이에요.\n"
+                allStop -> "어느 길로 가도 도착 전에 알림 기준(${s.threshold}%) 아래로 내려가요. 알림이 뜨면 가는 길 " +
+                    "${if (s.energyType.isElectric) "충전소" else "주유소"}를 들르는 경로를 비교해 드려요.\n"
                 c.results.any { it.needsStop } -> "알림 기준 아래로 내려가는 길은 가는 길 주유소를 함께 봐야 해서 추천에서 뺐어요.\n"
                 else -> ""
             } +
@@ -647,6 +690,7 @@ class MainActivity : Activity() {
         listOf(
             button("시연 B · 충전", Kind.BOLT) { startDemo("B") },
             button("시연 A · 주유", Kind.BOLT) { startDemo("A") },
+            button("시연 C · 운전 습관", Kind.BOLT) { startDemo("C") },
             button("실차 모드", Kind.QUIET) { startDemo("off") },
             button("처음부터", Kind.QUIET) {
                 resetOverlay.visibility = View.VISIBLE // one tap must not wipe the real record
@@ -671,8 +715,8 @@ class MainActivity : Activity() {
         // Above the character: date, this month's 손익 (large), today.
         dateText = text("", 32f, palette.text, center = true)
         home.addView(dateText)
-        home.addView(text("이번 달 손익", 26f, palette.muted, center = true).apply { setPadding(0, dp(6), 0, 0) })
-        monthAmount = text("", 96f, palette.accent, bold = true, center = true).apply {
+        home.addView(text("누적 절약액", 26f, palette.muted, center = true).apply { setPadding(0, dp(6), 0, 0) })
+        monthAmount = text("", 96f, palette.text, bold = true, center = true).apply {
             setPadding(0, 0, 0, 0)
             includeFontPadding = false
         }
@@ -794,7 +838,9 @@ class MainActivity : Activity() {
         recButtons.addView(button("응, 들를게", Kind.MAIN) { controller?.approve() }, rowParams())
         recButtons.addView(button("아니", Kind.QUIET) { controller?.decline() }, rowParams())
         recButtons.addView(button("왜 거기야?", Kind.QUIET) { controller?.explain() }, rowParams())
+        adviceButton = button("확인", Kind.MAIN) { controller?.closeAdvice() }.apply { visibility = View.GONE }
         listOf(recTitle, recPlan, recTable, recDiff, recOrigin, recButtons).forEach(recCard::addView)
+        recCard.addView(adviceButton, LinearLayout.LayoutParams(dp(240), LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
 
         // Route comparison card (before departure, 기획서 3-2).
         routeCard = LinearLayout(this).apply {
@@ -935,7 +981,7 @@ class MainActivity : Activity() {
         }
         settingsBox.addView(voiceRow)
         settingsBox.addView(text("시간의 값 (시급)", 26f, palette.text, bold = true).apply { setPadding(0, dp(12), 0, 0) })
-        settingsBox.addView(text("출발 전에 경로를 비교할 때 1시간을 이 금액으로 쳐요. 비교에만 쓰고 절약액으로 쌓지 않아요.", 22f, palette.muted))
+        settingsBox.addView(text("경로와 가는 길 주유소를 비교할 때 1시간을 이 금액으로 쳐요. 출발 전 경로 비교는 비교만 하고 쌓지 않아요.", 22f, palette.muted))
         wageRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(10), 0, dp(10))

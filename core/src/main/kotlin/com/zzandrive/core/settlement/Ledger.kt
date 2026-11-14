@@ -2,11 +2,10 @@ package com.zzandrive.core.settlement
 
 import com.zzandrive.core.domain.CharacterProgress
 import com.zzandrive.core.domain.CharacterState
-import com.zzandrive.core.domain.CompareMode
 import com.zzandrive.core.domain.CostBreakdown
-import com.zzandrive.core.domain.CostCalculator
 import com.zzandrive.core.domain.CreditRule
 import com.zzandrive.core.domain.MC
+import com.zzandrive.core.domain.pricesCompared
 import com.zzandrive.core.domain.Recommendation
 import com.zzandrive.core.domain.toWon
 import com.zzandrive.core.verification.RefillDetected
@@ -206,9 +205,8 @@ object SettlementPolicy {
         if (usedStationId != rec.best.offer.id) return SettlementDecision.Skip(SkipReason.OTHER_STATION)
 
         val quantity = BigDecimal.valueOf(detection.quantity)
-        val eff = rec.efficiency.kmPerUnit
-        val reference = CostCalculator.realCost(quantity, target.offer, eff)
-        val used = CostCalculator.realCost(quantity, rec.best.offer, eff)
+        val reference = rec.cost(target.offer, quantity)
+        val used = rec.cost(rec.best.offer, quantity)
         val raw = reference.total.subtract(used.total, MC)
         val won = raw.toWon()
         return if (won > 0) SettlementDecision.Credit(won, raw) else SettlementDecision.Skip(SkipReason.NOT_POSITIVE, won)
@@ -222,7 +220,7 @@ object SettlementPolicy {
 object OpportunityCost {
     /** [approved]: the driver said "응" (spec D-28: no deduction for something the driver did not agree to). */
     fun amountWon(rec: Recommendation, approved: Boolean): Long {
-        if (!approved || rec.creditRule == CreditRule.NONE || rec.mode != CompareMode.COST_INCLUDED) return 0
+        if (!approved || rec.creditRule == CreditRule.NONE || !rec.mode.pricesCompared) return 0
         val nearest = rec.ranked.minWith(compareBy<CostBreakdown>({ it.offer.oneWayKm }, { it.total }, { it.offer.id }))
         val extraTrip = rec.best.detourCost.add(rec.best.toll, MC).subtract(nearest.detourCost.add(nearest.toll, MC), MC).toWon()
         return maxOf(0L, minOf(rec.expectedSaving.toWon(), extraTrip))

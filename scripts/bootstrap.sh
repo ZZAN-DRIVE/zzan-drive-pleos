@@ -116,7 +116,7 @@ step "8/8 Done"
 if [ "$DRY_RUN" = 1 ]; then ok "Dry run complete. Nothing was installed or changed."; exit 0; fi
 info "Vehicle values: $ZZAN_CONSOLE_URL/ (keep the tab open to change values by hand)"
 info "Try it:         in the app, [시연 B · 충전] / [시연 A · 주유] play the plan's scenarios without the console"
-info "Real data E2E:  scripts/e2e-scenario-b.sh (battery 25 % → recommendation → +40 kWh → 2,308원 → level 3)"
+info "Real data E2E:  scripts/e2e-scenario-b.sh (battery 25 % → recommendation → +40 kWh → 2,323원 → level 3)"
 info "App log:        adb -s $ZZAN_SERIAL logcat -s ZzanApp ZzanDemo   (diagnostics screen: JjanShell)"
 info "Stop emulator:  scripts/emulator.sh stop"
 if [ "$BROWSER" = 1 ]; then

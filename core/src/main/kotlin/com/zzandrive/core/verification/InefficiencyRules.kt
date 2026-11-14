@@ -5,7 +5,7 @@ import java.math.BigDecimal
 import java.math.MathContext
 
 /**
- * 기획서 3-5 산식 (pure functions; wiring them to PERF_VEHICLE_SPEED is the next step).
+ * 기획서 3-5 산식 as pure functions; [DrivingMonitor] applies them to a trip's samples.
  * Speeds in km/h, accelerations in km/h per second, times in seconds unless the name ends in Ms or Ns.
  */
 object InefficiencyRules {
@@ -64,12 +64,38 @@ object InefficiencyRules {
     /** True for kinds that may lead to a deduction (subject to exclusions: signals, congestion, needed acceleration). */
     fun chargeable(kind: Kind): Boolean = kind == Kind.RAPID_START || kind == Kind.RAPID_ACCEL
 
+    /** 공회전 유예: only what goes past 180 seconds is charged. */
+    const val IDLE_GRACE_SECONDS = 180L
+
     /** T_eval = max(0, T_confirmed − 180 s). */
-    fun idleEvaluationSeconds(confirmedIdleSeconds: Long): Long = maxOf(0L, confirmedIdleSeconds - 180L)
+    fun idleEvaluationSeconds(confirmedIdleSeconds: Long): Long = maxOf(0L, confirmedIdleSeconds - IDLE_GRACE_SECONDS)
 
     /** C_drive = d × k × p. */
     fun driveExtraCost(distanceKm: BigDecimal, type: EnergyType, unitPrice: BigDecimal): BigDecimal =
         distanceKm.multiply(extraUsePerKm(type), MC).multiply(unitPrice, MC)
+
+    /**
+     * 급가속·급출발 1건의 차감액 (spec D-35): one event counts as 1 km of aggressive driving, k × p
+     * (휘발유 136.00원, 경유 68.15원, 전기 23.87원 at the survey prices).
+     */
+    fun accelEventCost(type: EnergyType, unitPrice: BigDecimal): BigDecimal = driveExtraCost(BigDecimal.ONE, type, unitPrice)
+
+    /** 과속 추가 연료소비 계수 a: litres per km for each km/h over the evaluation speed (기획 계산식, spec D-37). */
+    val SPEEDING_COEFFICIENT: BigDecimal = BigDecimal("0.000064675")
+
+    /** 평가 속도 = 도로 제한 속도 × 1.1 (the usual camera tolerance). */
+    fun evaluationSpeed(limitKmh: Int): BigDecimal = BigDecimal(limitKmh).multiply(BigDecimal("1.1"), MC)
+
+    /**
+     * 과속 추가 연료비 = 과속 주행 거리 × a × (주행 속도 − 평가 속도) × 평균 단가. 0 at or below the evaluation speed.
+     * The coefficient is a fuel figure, so electric cars are not charged.
+     */
+    fun speedingCost(distanceKm: BigDecimal, speedKmh: BigDecimal, limitKmh: Int, type: EnergyType, unitPrice: BigDecimal): BigDecimal {
+        if (type.isElectric) return BigDecimal.ZERO
+        val over = speedKmh.subtract(evaluationSpeed(limitKmh), MC)
+        if (over.signum() <= 0) return BigDecimal.ZERO
+        return distanceKm.multiply(SPEEDING_COEFFICIENT, MC).multiply(over, MC).multiply(unitPrice, MC)
+    }
 
     /** C_idle = T_eval ÷ 3,600 × r × p (0 for electric). */
     fun idleCost(evaluationSeconds: Long, type: EnergyType, unitPrice: BigDecimal): BigDecimal {

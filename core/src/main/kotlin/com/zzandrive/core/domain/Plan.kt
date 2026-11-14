@@ -1,5 +1,6 @@
 package com.zzandrive.core.domain
 
+import com.zzandrive.data.api.ActiveRoute
 import com.zzandrive.data.api.EnergyType
 import com.zzandrive.data.api.StationOffer
 import java.math.BigDecimal
@@ -23,7 +24,13 @@ enum class CompareMode {
 
     /** Asked while a route is active: the cheapest on the route, no comparison (p.5 ⑥). */
     ON_ROUTE,
+
+    /** With a destination: the whole-route spend of each station route, time included (기획 계산식, spec D-32). */
+    ROUTE_TOTAL,
 }
+
+/** Prices were compared, so a refill there can be credited and passing it by can be charged. */
+val CompareMode.pricesCompared: Boolean get() = this == CompareMode.COST_INCLUDED || this == CompareMode.ROUTE_TOTAL
 
 /** What a confirmed refill is compared with when it is credited (spec D-29). */
 enum class CreditRule {
@@ -35,6 +42,9 @@ enum class CreditRule {
 
     /** No price comparison was made, so nothing can be credited. */
     NONE,
+
+    /** The destination is within range: against going on without a stop (spec D-34). */
+    VS_NO_STOP,
 }
 
 /** The driver's answer to "얼마나 넣을까?" (p.5, p.9). */
@@ -110,9 +120,41 @@ object Reachability {
         RouteBranch.UNREACHABLE -> energyNow.multiply(efficiency, MC).multiply(MARGIN, MC)
     }
 
+    /**
+     * 안전 여유 연료량 (기획 계산식, spec D-33): the alert-level amount while the level is above it; at or below it,
+     * a tenth of what is left (the same [MARGIN]).
+     */
+    fun reserve(energyNow: BigDecimal, thresholdAmount: BigDecimal): BigDecimal =
+        if (energyNow > thresholdAmount) thresholdAmount else energyNow.multiply(BigDecimal.ONE.subtract(MARGIN, MC), MC)
+
+    /** 주행 가능 거리 = (현재 잔량 − 안전 여유) × 연비·전비. */
+    fun rangeKm(energyNow: BigDecimal, thresholdAmount: BigDecimal, efficiency: BigDecimal): BigDecimal =
+        energyNow.subtract(reserve(energyNow, thresholdAmount), MC).multiply(efficiency, MC).max(BigDecimal.ZERO)
+
+    /** "현재 연료로 목적지에 갈 수 있다": the rest of the route is within [rangeKm]. */
+    fun canReach(energyNow: BigDecimal, thresholdAmount: BigDecimal, routeKm: BigDecimal, efficiency: BigDecimal): Boolean =
+        routeKm <= rangeKm(energyNow, thresholdAmount, efficiency)
+
     /** Stations the car can get to under [limitKm]; offers without [StationOffer.aheadKm] are not on the route and left out. */
     fun reachable(offers: List<StationOffer>, limitKm: BigDecimal?): List<StationOffer> =
         if (limitKm == null) offers else offers.filter { o -> o.aheadKm?.let { it <= limitKm } ?: false }
+}
+
+/** spec D-34: how many routes a destination comparison shows, and "go on without a stop" as one of them. */
+object RoutePolicy {
+    /** 기획 계산식 "총 3개의 … 경로 추천". */
+    const val SHOWN = 3
+
+    const val NO_STOP_ID = "no-stop"
+
+    /** The fastest way on with no stop, as a row priced at the reference price (so its purchase difference is 0). */
+    fun noStopOffer(route: ActiveRoute, type: EnergyType, referencePrice: BigDecimal): StationOffer? = route.noStop?.let { leg ->
+        StationOffer(
+            id = NO_STOP_ID, name = if (type.isElectric) "충전 없이 가기" else "주유 없이 가기", energyType = type,
+            unitPrice = referencePrice, roundTripDetourKm = BigDecimal.ZERO, origin = route.origin,
+            aheadKm = BigDecimal.ZERO, onRoute = true, route = leg,
+        )
+    }
 }
 
 /**

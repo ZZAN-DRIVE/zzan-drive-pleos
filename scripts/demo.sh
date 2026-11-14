@@ -2,16 +2,18 @@
 # Plays the plan's scenarios on the Pleos emulator, paced for people: a live demo or a screen recording.
 #
 #   scripts/demo.sh scenario-b      # 기획서 시나리오 B, 실제 차량 데이터: [충전소 찾기] → 현재 위치 → 40 kWh
-#                                   #   → 도로 5 km 밖 1곳 제외 → B가 2,308원 이득 → 승인 → B에서 +40 kWh → 레벨 3
+#                                   #   → 도로 5 km 밖 1곳 제외 → B가 2,323원 이득 → 승인 → B에서 +40 kWh → 레벨 3
 #   scripts/demo.sh scenario-b-far  # 저장한 곳(본가) 기준: 5 km 안에 없음 → 가장 가까운 1곳만 안내(비교·적립 없음)
 #   scripts/demo.sh scenario-b-skip # 양을 건너뜀 → 가격 없이 가까운 곳 안내 → 거기서 충전해도 적립 없음, 다음 추천은 다시 열림
-#   scripts/demo.sh scenario-pass   # 기회비용: B를 승인하고 충전 없이 지나침 → 정차 후 "92원 뺐어" → 다음 추천은 다시 열림
-#   scripts/demo.sh scenario-b-auto # 배터리 25%(정차): 앱이 먼저 넣을 양을 묻고 → 40 kWh → 추천 → 승인 → +40 kWh → 2,308원
-#   scripts/demo.sh scenario-a      # 시연 데이터(Mock): 강릉까지 220 km, 연료 10% → 넣을 양 50 L → 목적지까지 못 감(③)
-#                                   #   → 갈 수 있는 두 곳 비교 → B가 860원 덜 듦 → 승인 → 50 L → 레벨 1
+#   scripts/demo.sh scenario-pass   # 기회비용: B를 승인하고 충전 없이 지나침 → 정차 후 "77원 뺐어" → 다음 추천은 다시 열림
+#   scripts/demo.sh scenario-b-auto # 배터리 25%(정차): 앱이 먼저 넣을 양을 묻고 → 40 kWh → 추천 → 승인 → +40 kWh → 2,323원
+#   scripts/demo.sh scenario-a      # 시연 데이터(Mock): 강릉까지 100 km, 연료 10% → 넣을 양 30 L → 목적지까지 못 감
+#                                   #   → 주유소를 들르는 경로 3곳 비교(총 지출) → C가 676원 덜 듦 → 승인 → 30 L → 레벨 1
 #   scripts/demo.sh scenario-drive  # 실제 차량 데이터, 음성 대화: 주행 중 배터리 25% → 화면은 가려진 채 "얼마나 충전할래?"
 #                                   #   → (인식 결과) 40 kWh → 양을 되말하며 추천 → 녹음된 "응"을 온디바이스 STT로 인식 → 승인
 #   scripts/demo.sh scenario-drive-quiet # 음성 답 끔: 주행 중엔 한 줄만 말하고 정차하면 넣을 양을 묻는다
+#   scripts/demo.sh scenario-habit  # 시연 데이터(Mock): 공회전 8분, 급출발·급가속 2건, 과속 6.25 km → 주행 끝에 377원을 한 번 차감
+#                                   #   → 레벨 적립액은 300원까지만 줄고 누적 1,500원(레벨 달성 금액)은 그대로
 #   scripts/demo.sh scenario-levels # 레벨 0 빈 지갑부터 10 킹크랩까지 레벨업 화면과 음성을 차례로 (정차 중)
 #
 # Options:
@@ -27,11 +29,11 @@ set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
 source "$(dirname "$0")/lib/scenario.sh"
 
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; }
 SCENARIO=""; STEP=0; TAP=0; RECORD=""; PERSONA="zzandori"
 while [ $# -gt 0 ]; do
   case "$1" in
-    scenario-a|scenario-b|scenario-b-far|scenario-b-skip|scenario-b-auto|scenario-pass|scenario-drive|scenario-drive-quiet|scenario-levels) SCENARIO="$1" ;;
+    scenario-a|scenario-b|scenario-b-far|scenario-b-skip|scenario-b-auto|scenario-pass|scenario-drive|scenario-drive-quiet|scenario-habit|scenario-levels) SCENARIO="$1" ;;
     --step)   STEP=1 ;;
     --tap)    TAP=1 ;;
     --record) shift; RECORD="${1:?--record needs a file name}" ;;
@@ -41,7 +43,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ -n "$SCENARIO" ] || { usage; die "Choose scenario-a, scenario-b, scenario-b-far, scenario-b-skip, scenario-b-auto, scenario-drive or scenario-levels."; }
+[ -n "$SCENARIO" ] || { usage; die "Choose scenario-a, scenario-b, scenario-b-far, scenario-b-skip, scenario-b-auto, scenario-pass, scenario-drive, scenario-drive-quiet, scenario-habit or scenario-levels."; }
 case "$PERSONA" in zzandori|zzansuni) ;; *) die "--persona must be zzandori or zzansuni" ;; esac
 
 detect_platform; resolve_sdk_root
@@ -129,7 +131,7 @@ play_b() {
   scene 3 "40 kWh" "도로 5 km 안의 두 곳만 비교(6.2 km 떨어진 C는 제외): 회사 앞(350원/kWh, 1 km)보다 집 가는 길 B(290원/kWh, 2 km)가 약 2,300원 이득"
   app_cmd fill --es zzan.arg q40
   check "5 km rule" "^CAND ref=current in=ev-a,ev-b excluded=ev-far:6.2" 10
-  check "recommendation" "^REC .*baseline=ev-a best=ev-b expected=2308 mode=COST_INCLUDED rule=VS_NEAREST qty=40" 10
+  check "recommendation" "^REC .*baseline=ev-a best=ev-b expected=2323 mode=COST_INCLUDED rule=VS_NEAREST qty=40" 10
   check "spoken" "^SAY .*약 2,300원 이득이야" 5
   hold 8
 
@@ -146,9 +148,9 @@ play_b() {
   charge_ramp 34.83 40 8 2.5 77.4
   ev_put charge_switch false; ev_put charge_port_open false
 
-  scene 6 "확인된 만큼만 적립" "차량 데이터로 40 kWh 확인 → 2,308원 확정 → 레벨 3 짜장면, 파스타까지 약 5,700원"
+  scene 6 "확인된 만큼만 적립" "차량 데이터로 40 kWh 확인 → 2,323원 확정 → 레벨 3 짜장면, 파스타까지 약 5,700원"
   check "detected 40 kWh at B" "^DETECT .*q=40\.000 basis=ENERGY .*station=ev-b" 30
-  check "settled 2,308원 → level 3" "^SETTLE amount=2308 level=3 accrual=1308 remaining=5692" 10
+  check "settled 2,323원 → level 3" "^SETTLE amount=2323 level=3 accrual=1323 remaining=5677" 10
   check "level-up line" "^SAY 짜장면 레벨 달성! 파스타까지 약 5,700원 남았어" 10
   check "level-up screen" "^SHOW level-up 3" 10
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
@@ -214,7 +216,7 @@ play_pass() {
   app_cmd ref --es zzan.arg current
   check "asks the amount" "^ASK fill reason=find" 10
   app_cmd fill --es zzan.arg q40
-  check "recommendation" "^REC .*best=ev-b expected=2308 mode=COST_INCLUDED rule=VS_NEAREST" 10
+  check "recommendation" "^REC .*best=ev-b expected=2323 mode=COST_INCLUDED rule=VS_NEAREST" 10
   approve
   hold 3
   app_front
@@ -225,13 +227,13 @@ play_pass() {
   geo 37.40200 127.10800 # at B
   hold 3
   geo 37.40800 127.10800 # ≈ 667 m past B
-  check "passed B" "^PASS station=ev-b rec=.* amount=92" 15
-  check "deducted once: min(2,308, 92)" "^OPP amount=92 applied=92 level=2 accrual=2908" 5
+  check "passed B" "^PASS station=ev-b rec=.* amount=77" 15
+  check "deducted once: min(2,323, 77)" "^OPP amount=77 applied=77 level=2 accrual=2923" 5
   if applog | grep -qE "^SAY .*지나와서"; then fail "spoke while driving"; else pass "nothing said while driving"; fi
 
   scene 3 "정차 후 한 줄" "정차하면 짠순이가 한 줄로 알려 준다. 레벨은 그대로"
   park
-  check "told after stopping" "^SAY 집 가는 길 B 충전소를 그냥 지나와서 92원 뺐어\." 15
+  check "told after stopping" "^SAY 집 가는 길 B 충전소를 그냥 지나와서 77원 뺐어\." 15
   hold 4
 
   scene 4 "다음 추천은 다시 열림" "기회비용으로 이 추천은 끝났다. 배터리가 기준(25%)에 닿으면 다시 묻는다"
@@ -266,7 +268,7 @@ play_b_auto() {
   check "low level" "^LOW level=25% threshold=25 parked=true" 20
   check "asks the amount" "^ASK fill reason=low" 10
   app_cmd fill --es zzan.arg q40
-  check "recommendation" "^REC .*reason=low baseline=ev-a best=ev-b expected=2308 mode=COST_INCLUDED rule=VS_NEAREST qty=40" 10
+  check "recommendation" "^REC .*reason=low baseline=ev-a best=ev-b expected=2323 mode=COST_INCLUDED rule=VS_NEAREST qty=40" 10
   check "spoken" "^SAY .*약 2,300원 이득이야" 5
   hold 8
 
@@ -283,9 +285,9 @@ play_b_auto() {
   charge_ramp 19.35 40 8 2.5 77.4
   ev_put charge_switch false; ev_put charge_port_open false
 
-  scene 5 "확인된 만큼만 적립" "차량 데이터로 40 kWh 확인 → 2,308원 확정 → 레벨 3 짜장면, 파스타까지 약 5,700원"
+  scene 5 "확인된 만큼만 적립" "차량 데이터로 40 kWh 확인 → 2,323원 확정 → 레벨 3 짜장면, 파스타까지 약 5,700원"
   check "detected 40 kWh at B" "^DETECT .*q=40\.000 basis=ENERGY .*station=ev-b" 30
-  check "settled 2,308원 → level 3" "^SETTLE amount=2308 level=3 accrual=1308 remaining=5692" 10
+  check "settled 2,323원 → level 3" "^SETTLE amount=2323 level=3 accrual=1323 remaining=5677" 10
   check "level-up line" "^SAY 짜장면 레벨 달성! 파스타까지 약 5,700원 남았어" 10
   check "level-up screen" "^SHOW level-up 3" 10
   # The character celebrates in place, then eats the new food and keeps holding it.
@@ -303,10 +305,10 @@ play_a() {
   adb_s logcat -c
   record_start
 
-  scene 0 "출발 전 경로 비교 (예시 데이터)" "강릉까지 고속도로·국도·혼합 경로. 운행비 + 시간 × 시급(5,000원)으로 비교한다. 시간 환산은 절약액으로 쌓지 않는다"
+  scene 0 "출발 전 경로 비교 (예시 데이터)" "강릉까지 고속도로·국도·혼합 경로. 운행비 + 시간 × 시급(5,000원)으로 비교한다. 이 비교는 절약액으로 쌓지 않는다"
   app_front --es zzan.demo A
-  check "three routes compared" "^ROUTES dest=강릉 best=national rival=highway faster=-70 costMore=-6289 wage=5000 highway:52675\+13333 national:46386\+19167 mixed:49530\+16250" 15
-  check "spoken" "^SAY 국도가 고속도로보다 70분 느리지만 약 6,300원 덜 들어\. 시급 5,000원으로 치면 국도가 나아!" 5
+  check "three routes compared" "^ROUTES dest=강릉 best=national rival=highway faster=-70 costMore=-7575 wage=5000 highway:37892\+13333 national:30317\+19167 mixed:34105\+16250" 15
+  check "spoken" "^SAY 국도가 고속도로보다 70분 느리지만 약 7,600원 덜 들어\. 시급 5,000원으로 치면 국도가 나아!" 5
   hold 6
   app_cmd routesok
   check "card closed, the trip goes on" "^ROUTES closed" 5
@@ -321,22 +323,23 @@ play_a() {
   SCN_TAG="ZzanDemo"
   hold 3
 
-  scene 2 "50 L" "남은 6 L로는 60 km(강릉까지 220 km): 목적지까지 못 간다(③). 갈 수 있는 두 곳 중 실질 비용이 낮은 B가 860원 덜 든다"
-  app_cmd fill --es zzan.arg q50
-  check "destination out of range" "^ROUTE dest=강릉 remainKm=220 branch=UNREACHABLE limitKm=54.0 reachable=fuel-a,fuel-b" 10
-  check "recommendation" "^REC .*baseline=fuel-a best=fuel-b expected=860 mode=COST_INCLUDED rule=VS_WORST qty=50" 10
-  check "spoken" "^SAY 이대로는 목적지까지 못 가\. 경로상 B 주유소가 860원 덜 들어\. 들를까\?" 5
+  scene 2 "30 L" "남은 6 L로 갈 수 있는 거리는 83 km(강릉까지 100 km): 목적지까지 못 간다. 주유소를 들르는 경로의 총 지출(연료비 + 가격 차이 + 통행료 + 시간비용)이 낮은 3곳을 보여 주고, C가 가장 비싼 B보다 676원 덜 든다"
+  app_cmd fill --es zzan.arg q30
+  check "destination out of range" "^ROUTE dest=강릉 remainKm=100 branch=UNREACHABLE limitKm=82\.6 reachable=route-a,route-b,route-c,route-d,route-e reach=no" 10
+  check "three routes, the lowest total at 0" "^TOTAL ref=1855\.43 wage=5000 qty=30 route-c:15134\(0\) route-d:15450\(-316\) route-b:15810\(-676\)" 10
+  check "recommendation" "^REC .*baseline=route-b best=route-c expected=676 mode=ROUTE_TOTAL rule=VS_WORST qty=30" 10
+  check "spoken" "^SAY 이대로는 목적지까지 못 가\. 시간까지 치면 강릉길 C 주유소가 약 680원 덜 들어\. 들를까\?" 5
   hold 8
 
-  scene 3 "응, 들를게" "승인하면 B 주유소로 안내한다"
+  scene 3 "응, 들를게" "승인하면 C 주유소로 안내한다"
   approve
   hold 3
 
-  scene 4 "주유 → 출발 → 정차" "50 L 주유 확인 → 860원 확정. 주행 중에는 음성 한 줄만, 레벨업 화면은 정차한 뒤 (삼각김밥)"
-  check "detected 50 L at B" "^DETECT .*q=50\.000 .*station=fuel-b" 30
-  check "settled 860원 → level 1" "^SETTLE amount=860 level=1 accrual=360 remaining=2140" 10
-  check "while driving: voice only" "^SAY 860원 아꼈어" 10
-  check "after parking: level-up" "^SAY 삼각김밥 레벨 달성! 아메리카노까지 약 2,100원 남았어" 20
+  scene 4 "주유 → 출발 → 정차" "30 L 주유 확인 → 676원 확정(시간비용 포함). 주행 중에는 음성 한 줄만, 레벨업 화면은 정차한 뒤 (삼각김밥)"
+  check "detected 30 L at C" "^DETECT .*q=30\.000 .*station=route-c" 30
+  check "settled 676원 → level 1" "^SETTLE amount=676 level=1 accrual=176 remaining=2324" 10
+  check "while driving: voice only" "^SAY 약 680원 아꼈어" 10
+  check "after parking: level-up" "^SAY 삼각김밥 레벨 달성! 아메리카노까지 약 2,300원 남았어" 20
   check "level-up screen" "^SHOW level-up 1" 10
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
   check "eats 삼각김밥" "^CLIP .*_lv1_[a-z0-9]+_eat\.webp" 15
@@ -425,13 +428,50 @@ play_drive_quiet() {
   if [ "$(driving_state)" = 0 ]; then pass "car service: parked"; else fail "car service did not report parked ($(driving_state))"; fi
   check "asks after stopping" "^ASK fill reason=low" 15
   app_cmd fill --es zzan.arg q40
-  check "recommendation after stopping" "^REC .*reason=low baseline=ev-a best=ev-b expected=2308 mode=COST_INCLUDED rule=VS_NEAREST qty=40" 10
+  check "recommendation after stopping" "^REC .*reason=low baseline=ev-a best=ev-b expected=2323 mode=COST_INCLUDED rule=VS_NEAREST qty=40" 10
   hold 5
   app_cmd decline
   record_stop
 }
 
 # Level table (LevelTable.DEFAULT in core, 기획서 3-4): food and the cumulative saving that reaches each level.
+play_habit() {
+  # shellcheck disable=SC2034  # read by lib/scenario.sh
+  SCN_TAG="ZzanDemo"
+  trap 'record_stop' EXIT
+  adb_s logcat -c
+  record_start
+
+  scene 0 "시동을 켠 채 8분 (시연 데이터)" "레벨 1 삼각김밥 · 적립 300원에서 시작. 기어 P, 속도 0, 엔진이 도는 상태가 180초를 넘으면 그 뒤부터 공회전으로 친다"
+  app_front --es zzan.demo C
+  check "starts at level 1 with 300원" "^SEED level=1 accrual=300" 15
+  check "the trip opens on the running engine" "^TRIP start id=trip-[0-9]+ by=engine" 10
+  check "idling past 180 s" "^HABIT idle over 180s" 10
+  check "one short line" "^SAY 시동 켠 채로 3분 넘었어\. 기름이 새고 있어!" 5
+
+  scene 1 "급출발과 급가속" "출발하며 1초에 14 km/h(급출발), 시속 40에서 1초에 10 km/h(급가속). 한 번의 가속은 1건, 건당 136원(공격적 주행 1 km 상당). 급제동은 기록만 한다"
+  check "harsh start" "^HABIT accel kind=RAPID_START v0=0\.0 a=14\.0 n=1 cost=136\.00" 15
+  check "a short line, no amount while driving" "^SAY 어이쿠, 살살 밟자!" 5
+  check "harsh acceleration" "^HABIT accel kind=RAPID_ACCEL v0=40\.0 a=10\.0 n=2 cost=136\.00" 15
+  check "hard braking is recorded only" "^HABIT decel a=-14\.0 recorded" 10
+
+  scene 2 "과속" "제한 100 km/h의 평가 속도는 110 km/h. 125 km/h로 6.25 km → 6.25 × 0.000064675 × 15 × 1,855.43 = 11.25원 (제한속도: 예시 데이터)"
+  check "speeding starts above limit × 1.1" "^HABIT speeding start v=125\.0 limit=100 eval=110" 20
+  check "a short line" "^SAY 조금만 천천히 가자!" 5
+
+  scene 3 "주행 끝 · 정산" "272.01 + 93.65 + 11.25 = 376.90 → 377원을 한 번 차감. 레벨 적립액은 300원까지만 줄고 누적 1,500원(레벨 1 달성 금액)은 그대로, 이번 달 손익에는 377원 전부"
+  check "trip totals" "^TRIP end id=trip-[0-9]+ accel=2:272\.01 idle=480s/300s:93\.65 speeding=6\.25km:11\.25 decel=1 raw=376\.90" 30
+  check "deducted once, stopping at the level's accrual" "^PENALTY trip=trip-[0-9]+ full=377 applied=300 level=1 accrual=0" 5
+  check "told after the stop" "^SAY 앗, 급가속, 공회전, 과속 때문에 이번 레벨 적립액이 다 줄었어…" 5
+  hold 6
+  local n
+  n="$(applog | grep -c '^PENALTY ' || true)"
+  if [ "$n" = 1 ]; then pass "one deduction for the trip"; else fail "one deduction for the trip (PENALTY lines: $n)"; fi
+  record_stop
+  app_front --es zzan.demo off
+  info "back to live mode (실차 모드)"
+}
+
 LEVEL_FOODS=(빈\ 지갑 삼각김밥 아메리카노 짜장면 파스타 치킨 족발 스테이크 한우 랍스터 킹크랩)
 LEVEL_WON=("0원" "1,500원" "4,000원" "8,000원" "15,000원" "26,000원" "42,000원" "66,000원" "100,000원" "150,000원" "250,000원")
 
@@ -473,6 +513,7 @@ case "$SCENARIO" in
   scenario-a) play_a ;;
   scenario-drive) play_drive ;;
   scenario-drive-quiet) play_drive_quiet ;;
+  scenario-habit) play_habit ;;
   scenario-levels) play_levels ;;
 esac
 

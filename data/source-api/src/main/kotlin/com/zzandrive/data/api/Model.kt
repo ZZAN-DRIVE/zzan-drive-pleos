@@ -56,12 +56,21 @@ data class ChargeHintSample(
     val active: Boolean get() = portOpen == true || switchOn == true
 }
 
-/** Parked = gear P (spec D-15). */
+/**
+ * Parked = gear P (spec D-15). The driving readings are optional: a source that cannot tell leaves them null, and then
+ * the driving habits (spec D-35..D-37) are simply not evaluated.
+ */
 data class DriveSample(
     override val atMs: Long,
     val parked: Boolean,
     val gear: String?,
     override val origin: DataOrigin,
+    /** Speed in km/h. */
+    val speedKmh: Double? = null,
+    /** The engine is running (fuel cars). */
+    val engineOn: Boolean? = null,
+    /** The legal speed limit of the road in km/h. */
+    val speedLimitKmh: Int? = null,
 ) : VehicleSample
 
 data class LocationSample(
@@ -84,6 +93,12 @@ interface VehicleSource {
     /** Asks for a fresh reading of everything; results arrive through the listener. */
     fun refresh()
 }
+
+/**
+ * A whole route in numbers, from here to the destination: for a station, the route that stops there
+ * (기획 계산식 "주유소를 포함한 경로"). [minutes] is driving time only; refuelling time is left out.
+ */
+data class RouteLeg(val km: BigDecimal, val minutes: BigDecimal, val tollWon: BigDecimal = BigDecimal.ZERO)
 
 /** A refuel/charge place with its price. Money is BigDecimal so no float rounding leaks into settlement. */
 data class StationOffer(
@@ -108,6 +123,8 @@ data class StationOffer(
     val aheadKm: BigDecimal? = null,
     /** On the current route (기획서 p.5 ⑥ "경로상"). */
     val onRoute: Boolean = false,
+    /** The whole route through this station to the destination, when a route source knows it (spec D-32). */
+    val route: RouteLeg? = null,
 ) {
     /** One-way road distance used for the 5 km rule and for "the nearest". */
     val oneWayKm: BigDecimal get() = roadKm ?: roundTripDetourKm.divide(BigDecimal(2))
@@ -134,7 +151,16 @@ fun interface PlaceSource {
  * The route navigation is guiding (기획서 p.4 3-1-1 ①②③): where to, how far is left, and stations along it with
  * [StationOffer.aheadKm] (distance from here) and [StationOffer.roundTripDetourKm] (extra distance to stop there).
  */
-data class ActiveRoute(val destinationName: String, val remainingKm: BigDecimal, val stations: List<StationOffer>, val origin: DataOrigin)
+data class ActiveRoute(
+    val destinationName: String,
+    val remainingKm: BigDecimal,
+    val stations: List<StationOffer>,
+    val origin: DataOrigin,
+    /** The fastest way on without a stop (기획 계산식 "주유하지 않은 경로"); null when the source cannot tell. */
+    val noStop: RouteLeg? = null,
+    /** 기준 단가 for this route's comparison; null means the survey average. */
+    val referencePrice: BigDecimal? = null,
+)
 
 fun interface RouteSource {
     fun active(energyType: EnergyType): ActiveRoute?

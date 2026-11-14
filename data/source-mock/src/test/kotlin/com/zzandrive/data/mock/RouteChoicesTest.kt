@@ -31,6 +31,23 @@ class RouteChoicesTest {
     }
 
     @Test
+    fun `with the official 15,3 km per litre the national road still wins at 5,000 won and the expressway at 10,000`() {
+        val official = PlanReference.surveyEfficiency(EnergyType.GASOLINE)
+        val c = RoutePlanner.compare(routes, official, price, bd("5000"))!!
+        assertEquals(listOf(37_892L, 30_317L, 34_105L), c.results.map { it.operatingCost.toWon() })
+        assertEquals(listOf(13_333L, 19_167L, 16_250L), c.results.map { it.timeValue.toWon() })
+        assertEquals("national", c.best.option.id)
+        assertEquals("highway", c.rival!!.option.id)
+        assertEquals(-70, c.minutesFaster)
+        assertEquals(-7_575L, c.costMoreWon)
+        assertEquals(
+            "국도가 고속도로보다 70분 느리지만 약 7,600원 덜 들어. 시급 5,000원으로 치면 국도가 나아!",
+            VoiceLines(Persona.ZZANDORI).routeAdvice(c.best.option.name, c.rival?.option?.name, c.minutesFaster, c.costMoreWon, 5_000),
+        )
+        assertEquals("highway", RoutePlanner.compare(routes, official, price, bd("10000"))!!.best.option.id)
+    }
+
+    @Test
     fun `a route that reaches the alert level on the way is not recommended without a stop`() {
         // 40 L, alert at 30 % of 60 L = 18 L: every route arrives with 15~17 L, so none is free of a stop.
         val tight = RoutePlanner.compare(routes, PlanReference.DEMO_FUEL_EFFICIENCY, price, bd("5000"), energyNow = bd("40"), thresholdAmount = bd("18"))!!

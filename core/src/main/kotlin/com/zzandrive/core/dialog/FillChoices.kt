@@ -36,7 +36,7 @@ object FillChoices {
         return if (type.isElectric) {
             listOf("full" to full, "q40" to "40kWh", "m10000" to "1만 원", "m20000" to "2만 원", "skip" to "건너뛰기 · 거리만")
         } else {
-            listOf("full" to full, "q50" to "50L", "m30000" to "3만 원", "m50000" to "5만 원", "skip" to "건너뛰기 · 거리만")
+            listOf("full" to full, "q30" to "30L", "q50" to "50L", "m30000" to "3만 원", "m50000" to "5만 원", "skip" to "건너뛰기 · 거리만")
         }
     }
 

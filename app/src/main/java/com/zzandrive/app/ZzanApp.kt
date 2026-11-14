@@ -19,6 +19,7 @@ import com.zzandrive.data.api.RouteSource
 import com.zzandrive.data.mock.FixturePlaceSource
 import com.zzandrive.data.mock.FixtureRouteSource
 import com.zzandrive.data.mock.FixtureStationSource
+import com.zzandrive.data.mock.FixtureStations
 import com.zzandrive.data.mock.ReplayVehicleSource
 import com.zzandrive.data.mock.Scenarios
 import com.zzandrive.data.pleos.PleosNavigator
@@ -133,6 +134,7 @@ class LiveGraph(private val app: ZzanApp) {
 enum class DemoScenario(val label: String, val energyType: EnergyType) {
     B_CHARGE("시나리오 B · 전기차 충전", EnergyType.ELECTRIC),
     A_FUEL("시나리오 A · 내연기관 주유", EnergyType.GASOLINE),
+    HABIT_FUEL("시연 C · 운전 습관", EnergyType.GASOLINE),
 }
 
 /** Same controller, Mock vehicle replay, in-memory ledger, separate prefs. Nothing touches the live ledger. */
@@ -153,8 +155,16 @@ class DemoGraph(app: ZzanApp, val scenario: DemoScenario) {
         clock = scheduler,
         scheduler = scheduler,
         modeReason = { scenario.label },
-        afterApprove = {
-            replay.play(if (scenario == DemoScenario.B_CHARGE) Scenarios.evChargeAtB(startKwh = EV_PARKED_KWH) else Scenarios.fuelRefillAtB())
+        afterApprove = { rec ->
+            replay.play(
+                if (scenario == DemoScenario.B_CHARGE) {
+                    Scenarios.evChargeAtB(startKwh = EV_PARKED_KWH)
+                } else {
+                    // The demo fills what was planned at the place that was recommended (30 L when no amount was given).
+                    val litres = rec.plannedQuantity.toDouble().takeIf { it > 0 } ?: 30.0
+                    Scenarios.fuelRefillAtB(addL = litres, at = rec.best.offer.location ?: FixtureStations.FUEL_B.location!!)
+                },
+            )
         },
         places = FixturePlaceSource(),
         routes = if (scenario == DemoScenario.A_FUEL) FixtureRouteSource() else RouteSource { null },
@@ -171,14 +181,18 @@ class DemoGraph(app: ZzanApp, val scenario: DemoScenario) {
     /**
      * B (기획서 p.17): parked at 45 %, the driver taps [충전소 찾기] and answers the place and the amount.
      * A (p.16~17): before departure to 강릉 with 40 L, the routes are compared (step 1). After [확인], at a rest stop
-     * with 6 L: the level is low, the character asks the amount, the destination is out of range (③), so it compares
-     * the stations the car can still reach.
+     * with 6 L and 100 km to go: the level is low, the character asks the amount, the destination is out of range, so
+     * it compares the whole routes through the stations the car can still reach (기획 계산식).
      */
     fun start() {
         controller.start()
         if (scenario == DemoScenario.B_CHARGE) {
             controller.seedScenarioB()
             replay.play(Scenarios.evParked())
+        } else if (scenario == DemoScenario.HABIT_FUEL) {
+            // C: level 1 with 300원, then one trip with idling, harsh acceleration and speeding (예시 데이터).
+            controller.seedScenarioC()
+            replay.play(Scenarios.habitTrip())
         } else {
             controller.seedScenarioA()
             replay.play(Scenarios.fuelDeparture())

@@ -8,6 +8,7 @@ import com.zzandrive.core.domain.Recommendation
 import com.zzandrive.data.api.DataOrigin
 import com.zzandrive.data.api.EnergyType
 import com.zzandrive.data.api.GeoPoint
+import com.zzandrive.data.api.RouteLeg
 import com.zzandrive.data.api.StationOffer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -30,6 +31,9 @@ data class OfferSnapshot(
     val roadKm: String? = null,
     val aheadKm: String? = null,
     val onRoute: Boolean = false,
+    val routeKm: String? = null,
+    val routeMin: String? = null,
+    val routeToll: String? = null,
 ) {
     fun toOffer(): StationOffer = StationOffer(
         id = id,
@@ -44,6 +48,11 @@ data class OfferSnapshot(
         roadKm = roadKm?.let(::BigDecimal),
         aheadKm = aheadKm?.let(::BigDecimal),
         onRoute = onRoute,
+        route = if (routeKm != null && routeMin != null) {
+            RouteLeg(BigDecimal(routeKm), BigDecimal(routeMin), routeToll?.let(::BigDecimal) ?: BigDecimal.ZERO)
+        } else {
+            null
+        },
     )
 
     companion object {
@@ -61,6 +70,9 @@ data class OfferSnapshot(
             roadKm = o.roadKm?.toPlainString(),
             aheadKm = o.aheadKm?.toPlainString(),
             onRoute = o.onRoute,
+            routeKm = o.route?.km?.toPlainString(),
+            routeMin = o.route?.minutes?.toPlainString(),
+            routeToll = o.route?.tollWon?.toPlainString(),
         )
     }
 }
@@ -98,6 +110,8 @@ data class RecommendationIssued(
     val reference: String? = null,
     val fill: String? = null,
     val travelPrice: String? = null,
+    /** Won per hour of a whole-route comparison (ROUTE_TOTAL). */
+    val wage: String? = null,
 ) : LedgerEvent {
     /** Rebuilds the recommendation exactly as issued (prices from the snapshot, not from now). */
     fun toRecommendation(): Recommendation {
@@ -105,11 +119,8 @@ data class RecommendationIssued(
         val qty = BigDecimal(plannedQuantity)
         val compareMode = runCatching { CompareMode.valueOf(mode) }.getOrDefault(CompareMode.COST_INCLUDED)
         val price = travelPrice?.let(::BigDecimal)
-        val ranked = candidates.map {
-            val offer = it.toOffer()
-            if (compareMode == CompareMode.COST_INCLUDED || price == null) CostCalculator.realCost(qty, offer, eff.kmPerUnit)
-            else CostCalculator.travelCost(offer, eff.kmPerUnit, price)
-        }
+        val wagePerHour = wage?.let(::BigDecimal)
+        val ranked = candidates.map { CostCalculator.cost(compareMode, qty, it.toOffer(), eff.kmPerUnit, price, wagePerHour) }
         return Recommendation(
             id = recId,
             issuedAtMs = atMs,
@@ -125,6 +136,7 @@ data class RecommendationIssued(
             referenceName = reference,
             fillLabel = fill,
             travelPrice = price,
+            wagePerHour = wagePerHour,
         )
     }
 
@@ -147,6 +159,7 @@ data class RecommendationIssued(
             reference = r.referenceName,
             fill = r.fillLabel,
             travelPrice = r.travelPrice?.toPlainString(),
+            wage = r.wagePerHour?.toPlainString(),
         )
     }
 }
@@ -192,10 +205,25 @@ data class SettlementSkipped(
     val rawAmountWon: Long? = null,
 ) : LedgerEvent
 
-/** Inefficient-driving deduction settled once per trip (R-06); the driving detection that produces it comes next. */
+/**
+ * Inefficient-driving deduction settled once per trip (R-06, spec D-38). [fullWon] is what the trip wasted; the
+ * breakdown is kept for the screen (exact amounts as strings).
+ */
 @Serializable
 @SerialName("penalty")
-data class PenaltyConfirmed(val tripId: String, override val atMs: Long, val fullWon: Long) : LedgerEvent
+data class PenaltyConfirmed(
+    val tripId: String,
+    override val atMs: Long,
+    val fullWon: Long,
+    val accelEvents: Int = 0,
+    val accelRaw: String? = null,
+    val idleSeconds: Long = 0,
+    val idleEvalSeconds: Long = 0,
+    val idleRaw: String? = null,
+    val speedingKm: String? = null,
+    val speedingRaw: String? = null,
+    val decelEvents: Int = 0,
+) : LedgerEvent
 
 /**
  * 기회비용 (기획서 p.7·p.8·p.14, spec D-28): the driver said "응", passed the recommended place and did not

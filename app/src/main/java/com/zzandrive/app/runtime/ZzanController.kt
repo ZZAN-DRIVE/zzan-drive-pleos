@@ -18,7 +18,6 @@ import com.zzandrive.core.domain.FillAnswer
 import com.zzandrive.core.domain.PlanContext
 import com.zzandrive.core.domain.PlanRequest
 import com.zzandrive.core.domain.Reachability
-import com.zzandrive.core.domain.RouteBranch
 import com.zzandrive.core.domain.CharacterProgress
 import com.zzandrive.core.domain.CharacterState
 import com.zzandrive.core.domain.Efficiency
@@ -26,9 +25,11 @@ import com.zzandrive.core.domain.PlanReference
 import com.zzandrive.core.domain.Recommendation
 import com.zzandrive.core.domain.Recommender
 import com.zzandrive.core.domain.RouteComparison
+import com.zzandrive.core.domain.RoutePolicy
 import com.zzandrive.core.domain.RoutePlanner
 import com.zzandrive.core.domain.TriggerPolicy
 import com.zzandrive.core.domain.bd
+import com.zzandrive.core.domain.pricesCompared
 import com.zzandrive.core.domain.toWon
 import com.zzandrive.core.settlement.Ledger
 import com.zzandrive.core.settlement.LedgerCodec
@@ -50,6 +51,11 @@ import com.zzandrive.core.verification.RefillDetector
 import com.zzandrive.core.verification.PassDetector
 import com.zzandrive.core.verification.StationMatcher
 import com.zzandrive.core.voice.Josa
+import com.zzandrive.core.verification.DrivingEvent
+import com.zzandrive.core.verification.DrivingMonitor
+import com.zzandrive.core.verification.InefficiencyRules
+import com.zzandrive.core.verification.TripPenalty
+import com.zzandrive.core.settlement.PenaltyConfirmed
 import com.zzandrive.core.voice.Persona
 import com.zzandrive.core.voice.VoiceLines
 import com.zzandrive.core.voice.WonFormat
@@ -115,7 +121,19 @@ data class UiState(
     val wage: Int = 0,
     /** The departure comparison is about to open (demo A). */
     val routesPending: Boolean = false,
+    /** "No stop needed" (spec D-34): the destination comparison where going on wins; closed with [확인]. */
+    val advice: Recommendation? = null,
+    /** The last trip's driving deductions (spec D-38), until the next trip starts. */
+    val trip: TripUi? = null,
+    /** The result line reports a deduction (drawn in the loss colour). */
+    val resultIsLoss: Boolean = false,
 )
+
+/**
+ * One trip's driving deductions for the screen. [appliedWon] is what the level's accrual actually lost; it is less than
+ * the trip's full amount when the accrual ran out ([cumulativeWon] then stays at the amount the level was reached at).
+ */
+data class TripUi(val penalty: TripPenalty, val appliedWon: Long, val cumulativeWon: Long)
 
 enum class AskStep { REFERENCE, FILL }
 
@@ -145,8 +163,8 @@ class ZzanController(
     private val clock: Clock,
     private val scheduler: Scheduler,
     private val modeReason: () -> String = { if (demo) "시연 모드" else "확인 중" },
-    /** Demo only: runs after the driver approves (plays the refill phase). */
-    private val afterApprove: (() -> Unit)? = null,
+    /** Demo only: runs after the driver approves (plays the refill phase at the recommended place). */
+    private val afterApprove: ((Recommendation) -> Unit)? = null,
     /** Saved places offered as "다른 장소" (p.5 ④). */
     private val places: PlaceSource = PlaceSource { emptyList() },
     /** Navigation is guiding a route (p.5 ⑥: then a search offers the cheapest on the route). */
@@ -211,6 +229,19 @@ class ZzanController(
 
     /** The departure comparison is about to open (demo A, until the level arrives): [찾기] waits. */
     private var routesPending = false
+
+    /** "No stop needed" (spec D-34): shown until the driver closes it; never in the ledger. */
+    private var advice: Recommendation? = null
+
+    /** spec D-35..D-38: turns speed, gear and engine readings into one deduction per trip. */
+    private var monitor = DrivingMonitor(vehicle.energyType)
+    private var trip: TripUi? = null
+
+    /** The result line that reports a deduction; any later result line replaces it. */
+    private var lossResult: String? = null
+
+    /** Sample time of the last short line said while driving: at most one a minute (R-30). */
+    private var lastNudgeAtMs: Long? = null
 
     fun start() {
         subscription = vehicle.subscribe(::onSample)
@@ -511,6 +542,7 @@ class ZzanController(
         val rec = currentRecommendation() ?: return
         stopListening()
         val nearest = rec.baseline.offer
+        if (nearest.id == RoutePolicy.NO_STOP_ID) return decline() // "just go on": not stopping is the other choice here
         if (nearest.id == rec.best.offer.id) return approve() // the nearest is the recommended place: that is a yes
         append(RecommendationDecided(rec.id, clock.nowMs(), approved = false))
         approval = Approval.DECLINED
@@ -557,7 +589,7 @@ class ZzanController(
                 if (rec.comparison != null) " ${best.name}에서 넣으면 쌓여요" else ""
         }
         publish()
-        afterApprove?.invoke()
+        afterApprove?.invoke(rec)
     }
 
     fun decline() {
@@ -584,6 +616,9 @@ class ZzanController(
         val cheaperBy = target?.offer?.unitPrice?.subtract(best.unitPrice)?.toWon() ?: 0
         val text = when {
             rec.mode == CompareMode.ON_ROUTE -> "가는 길에서 ${rec.energyType.unit}당 제일 싼 곳이야."
+            rec.mode == CompareMode.ROUTE_TOTAL && target == null -> "남은 ${if (rec.energyType.isElectric) "배터리" else "기름"}로 갈 수 있는 곳이 여기뿐이야."
+            rec.mode == CompareMode.ROUTE_TOTAL ->
+                lines().explainRoute(rec.energyType.isElectric, best.name, rec.expectedSaving.toWon())
             target == null -> "가격은 빼고 가까운 곳으로 골랐어."
             rec.recommendsBaseline || target.offer.id == best.id -> lines().nearestChosen(best.name)
             // One line from the same numbers as the card (no separately rounded totals).
@@ -599,6 +634,9 @@ class ZzanController(
 
     /** Debug/demo: start at level 0 with 1,000 won and 짠돌이 (시나리오 A). */
     fun seedScenarioA() = seed(level = 0, accrual = 1_000, persona = Persona.ZZANDORI)
+
+    /** Debug/demo: start at level 1 with 300 won and 짠돌이 (시연 C: the deduction stops at the level's accrual). */
+    fun seedScenarioC() = seed(level = 1, accrual = 300, persona = Persona.ZZANDORI)
 
     /**
      * Debug/demo: jump to [level] (accrual 0) and play that level's level-up screen and line when parked,
@@ -628,6 +666,11 @@ class ZzanController(
         pass.clear()
         pendingParkedLine = null
         routeComparison = null
+        advice = null
+        monitor = DrivingMonitor(vehicle.energyType)
+        trip = null
+        lossResult = null
+        lastNudgeAtMs = null
         consentAtStop = false
         stopListening()
         log("RESET")
@@ -652,6 +695,7 @@ class ZzanController(
                 if (vehicle.energyType != energyType) { // mode decided after start (R-10): rebuild the detector
                     energyType = vehicle.energyType
                     detector = newDetector()
+                    monitor = DrivingMonitor(energyType)
                     log("MODE ${modeName()} (${modeReason()})")
                 }
                 checkTrigger(s)
@@ -661,6 +705,7 @@ class ZzanController(
                 val wasParked = parked
                 parked = s.parked
                 gear = s.gear
+                monitor.onSample(s).forEach { onDriving(it, s.atMs) }
                 if (wasParked != true && s.parked) {
                     pendingParkedLine?.let { line -> pendingParkedLine = null; say(line) }
                     if (consentAtStop) {
@@ -719,8 +764,11 @@ class ZzanController(
 
     private fun recommendationOpen(): Boolean = approval == Approval.WAITING || approval == Approval.APPROVED
 
-    private fun efficiency(type: EnergyType): Efficiency =
-        if (type.isElectric) PlanReference.DEMO_EV_EFFICIENCY else PlanReference.DEMO_FUEL_EFFICIENCY
+    /**
+     * 기획서 3-1의 공인 연비·전비 (spec D-14). The Vehicle SDK has efficiency readings, but the 2.1.0 emulator answers
+     * "not supported" for all of them (the diagnostics screen shows it), so the survey values are what the app uses.
+     */
+    private fun efficiency(type: EnergyType): Efficiency = PlanReference.surveyEfficiency(type)
 
     /** The fixed-amount flow (debug "compare"): 40 kWh / 50 L (the demo assumption) for every candidate, against the nearest. */
     private fun issueRecommendation(reason: String) {
@@ -735,21 +783,23 @@ class ZzanController(
     private fun planRecommendation(ref: Reference, fill: FillAnswer, onRoute: Boolean, reason: String) {
         val type = vehicle.energyType
         val now = clock.nowMs()
-        // With a destination, the automatic case is ②-1·③: only stations the car can still reach (spec D-30).
-        val mustStop = if (!onRoute && reason == "low") mustStopPlan(type) else null
-        val offers = mustStop?.second ?: stations.candidates(type, ref.point ?: location)
+        // With a destination (기획 계산식, spec D-32..D-34): the stations within range, each as a whole route.
+        val onWay = if (!onRoute && reason == "low") routePlan(type) else null
+        val offers = onWay?.offers ?: stations.candidates(type, ref.point ?: location)
         val context = when {
             onRoute -> PlanContext.OnRouteRequest
-            mustStop != null -> PlanContext.MustStop(mustStop.first)
+            onWay != null -> PlanContext.Destination(onWay.noStop)
             else -> PlanContext.NoDestination
         }
         val request = PlanRequest(
             id = "rec-$now", nowMs = now, energyType = type, offers = offers, efficiency = efficiency(type), fill = fill,
-            room = roomLeft(), context = context, referenceName = if (mustStop != null) "경로" else ref.name,
+            room = roomLeft(), context = context, referenceName = if (onWay != null) "경로" else ref.name,
             fillLabel = pendingFillLabel ?: FillChoices.label(fill, type.unit), issueLocation = location,
+            travelPrice = onWay?.referencePrice ?: PlanReference.survey(type).unitPrice,
+            wagePerHour = java.math.BigDecimal(prefs.wage),
         )
         pendingFillLabel = null
-        if (mustStop == null) {
+        if (onWay == null) {
             val (inside, outside) = CandidatePolicy.split(offers.filter { it.energyType == type })
             log("CAND ref=${ref.id} in=${inside.joinToString(",") { it.id }} excluded=${outside.joinToString(",") { "${it.id}:${it.oneWayKm.stripTrailingZeros().toPlainString()}" }}")
         }
@@ -762,15 +812,48 @@ class ZzanController(
             say("주변에 갈 만한 곳을 못 찾았어.")
             return publish()
         }
-        issue(rec, reason)
+        if (rec.noStop) adviseNoStop(rec) else issue(rec, reason)
     }
 
     /**
-     * ②-1·③ (spec D-30): the branch for the guided route and the stations within reach. The level is already at the
-     * threshold when this runs, so "before the threshold" leaves no room: both branches plan a stop within 90 % of
-     * the remaining range. Null without a route or a readable level (then the search is around the current location).
+     * spec D-34: the destination is within range and going on without a stop costs the least. Nothing to approve and
+     * nothing to credit, so it is told, not recorded as a recommendation.
      */
-    private fun mustStopPlan(type: EnergyType): Pair<RouteBranch, List<com.zzandrive.data.api.StationOffer>>? {
+    private fun adviseNoStop(rec: Recommendation) {
+        val next = rec.ranked.getOrNull(1)
+        val more = next?.total?.subtract(rec.best.total)?.toWon()
+        log(
+            "REC none (no stop needed) " + rec.ranked.joinToString(" ") { "${it.offer.id}:${it.total.toWon()}" } +
+                " qty=${rec.plannedQuantity.stripTrailingZeros().toPlainString()}",
+        )
+        fillHeard = false
+        advice = rec
+        lastResult = null
+        say(lines().noStopNeeded(rec.energyType.isElectric, next?.offer?.name, more))
+        publish()
+    }
+
+    /** [확인] on the "no stop needed" card. */
+    fun closeAdvice() {
+        if (advice == null) return
+        advice = null
+        log("ADVICE closed")
+        publish()
+    }
+
+    /** The stations within range on the guided route, and "go on without a stop" when the destination is within range too. */
+    private class RoutePlan(
+        val offers: List<com.zzandrive.data.api.StationOffer>,
+        val noStop: com.zzandrive.data.api.StationOffer?,
+        val referencePrice: java.math.BigDecimal,
+    )
+
+    /**
+     * 목적지가 있는 추천 (기획 계산식, spec D-33): 주행 가능 거리 = (잔량 − 안전 여유) × 연비. Stations ahead within
+     * that range are the candidates; when the rest of the route is within it too, not stopping is a choice as well.
+     * Null without a route, a readable level, or anything to offer (then the search is around the current location).
+     */
+    private fun routePlan(type: EnergyType): RoutePlan? {
         val route = routes.active(type) ?: return null
         val e = lastEnergy ?: return null
         val cap = e.capacity ?: return null
@@ -779,19 +862,24 @@ class ZzanController(
         val thresholdAmount = java.math.BigDecimal.valueOf(cap * prefs.threshold(type) / 100.0)
         val eff = efficiency(type).kmPerUnit
         val branch = Reachability.classify(energyNow, thresholdAmount, route.remainingKm, eff)
-        val limit = Reachability.limitKm(RouteBranch.UNREACHABLE, energyNow, thresholdAmount, eff)
+        val limit = Reachability.rangeKm(energyNow, thresholdAmount, eff)
+        val reach = Reachability.canReach(energyNow, thresholdAmount, route.remainingKm, eff)
         val reachable = Reachability.reachable(route.stations.filter { it.energyType == type }, limit)
         log(
             "ROUTE dest=${route.destinationName} remainKm=${route.remainingKm.toPlainString()} branch=$branch " +
-                "limitKm=${limit?.setScale(1, java.math.RoundingMode.HALF_UP)?.toPlainString()} reachable=${reachable.joinToString(",") { it.id }}",
+                "limitKm=${limit.setScale(1, java.math.RoundingMode.HALF_UP).toPlainString()} reachable=${reachable.joinToString(",") { it.id }} " +
+                "reach=${if (reach) "yes" else "no"}",
         )
-        return if (reachable.isEmpty()) null else branch to reachable
+        if (reachable.isEmpty()) return null
+        val reference = route.referencePrice ?: PlanReference.survey(type).unitPrice
+        return RoutePlan(reachable, if (reach) RoutePolicy.noStopOffer(route, type, reference) else null, reference)
     }
 
     private fun issue(rec: Recommendation, reason: String) {
         val saving = rec.expectedSaving.toWon()
         append(RecommendationIssued.of(rec, saving))
         approval = Approval.WAITING
+        advice = null
         // No automatic one right after a manual one in the low zone; above it the low alert stays armed.
         val pct = lastEnergy?.socPercent
         if (pct == null || TriggerPolicy.fires(pct, prefs.threshold(vehicle.energyType))) armed = false
@@ -801,7 +889,14 @@ class ZzanController(
                 "mode=${rec.mode} rule=${rec.creditRule} qty=${rec.plannedQuantity.stripTrailingZeros().toPlainString()}",
         )
         // The amount heard by voice is said back ("40kWh면", "가득이면") so a mishearing is caught (implicit confirmation).
-        val echo = if (fillHeard && rec.mode == CompareMode.COST_INCLUDED) rec.fillLabel?.let(Josa::myeon) else null
+        if (rec.mode == CompareMode.ROUTE_TOTAL) {
+            log(
+                "TOTAL ref=${rec.travelPrice?.stripTrailingZeros()?.toPlainString()} wage=${rec.wagePerHour?.stripTrailingZeros()?.toPlainString()} " +
+                    "qty=${rec.plannedQuantity.stripTrailingZeros().toPlainString()} " +
+                    rec.ranked.joinToString(" ") { "${it.offer.id}:${it.total.toWon()}(${rec.best.total.subtract(it.total).toWon()})" },
+            )
+        }
+        val echo = if (fillHeard && rec.mode.pricesCompared) rec.fillLabel?.let(Josa::myeon) else null
         fillHeard = false
         ask(recommendationLine(rec, saving, echo), Expect.CONSENT)
         publish()
@@ -819,6 +914,11 @@ class ZzanController(
                 parked == false -> lead + v.recommendShort(best.name, saving) // driving: one place, one amount
                 electric -> lead + v.recommendCharge(rec.baseline.offer.name, best.name, saving)
                 else -> lead + v.recommendRefuel(rec.baseline.offer.name, best.name, saving)
+            }
+            CompareMode.ROUTE_TOTAL -> when {
+                rec.creditRule == CreditRule.VS_NO_STOP -> lead + v.stopPays(best.name, saving)
+                rec.comparison == null -> v.onlyStop(best.name)
+                else -> v.mustStopRoute(best.name, saving, echo)
             }
             CompareMode.ROUTE_ONLY -> v.routeOnly(best.name, km(best.oneWayKm))
             CompareMode.NEAREST_ONLY -> v.nearestOnly(best.name, km(best.oneWayKm))
@@ -887,6 +987,83 @@ class ZzanController(
         else -> null
     }
 
+    /**
+     * 운전 습관 (기획서 3-5, spec D-35..D-38). While driving: at most one short line a minute and never over an open
+     * question. The amount is settled once, when the trip ends, and told then (the car is parked by definition).
+     */
+    private fun onDriving(e: DrivingEvent, atMs: Long) {
+        when (e) {
+            is DrivingEvent.TripStarted -> {
+                trip = null // a new trip: the last one's summary leaves the screen
+                log("TRIP start id=${e.tripId} by=${if (e.byEngine) "engine" else "drive"}")
+            }
+            is DrivingEvent.HarshAccel -> {
+                log("HABIT accel kind=${e.kind} v0=${f1(e.v0)} a=${f1(e.a)} n=${e.count} cost=${f2(e.cost)}")
+                nudge(atMs) { lines().harshAccelNudge() }
+            }
+            is DrivingEvent.Decel -> log("HABIT decel a=${f1(e.a)} recorded")
+            DrivingEvent.IdleOver -> {
+                log("HABIT idle over 180s")
+                nudge(atMs) { lines().idleNudge() }
+            }
+            is DrivingEvent.SpeedingStarted -> {
+                log("HABIT speeding start v=${f1(e.speedKmh)} limit=${e.limitKmh} eval=${InefficiencyRules.evaluationSpeed(e.limitKmh).stripTrailingZeros().toPlainString()}")
+                nudge(atMs) { lines().speedingNudge() }
+            }
+            is DrivingEvent.TripEnded -> onTripEnded(e.penalty)
+        }
+    }
+
+    private fun nudge(atMs: Long, line: () -> String) {
+        val last = lastNudgeAtMs
+        if (last != null && atMs - last < NUDGE_GAP_MS) return
+        if (dialog != DialogState.Idle || approval == Approval.WAITING || listening) return // never over a question
+        lastNudgeAtMs = atMs
+        say(line())
+    }
+
+    private fun onTripEnded(p: TripPenalty) {
+        val evaluated = p.accelEvents > 0 || p.decelEvents > 0 || p.idleSeconds > 0 || p.speedingKm.signum() > 0
+        if (!evaluated) return // nothing was observed (no speed readings): the trip leaves no trace
+        log(
+            "TRIP end id=${p.tripId} accel=${p.accelEvents}:${f2(p.accelCost)} idle=${p.idleSeconds}s/${p.idleEvalSeconds}s:${f2(p.idleCost)} " +
+                "speeding=${f2(p.speedingKm)}km:${f2(p.speedingCost)} decel=${p.decelEvents} raw=${f2(p.total)}",
+        )
+        val full = p.fullWon
+        if (full <= 0) {
+            trip = TripUi(p, 0, progress.totalSaved(ledger.state))
+            lastResult = "이번 주행은 빠진 금액이 없어요" + if (p.decelEvents > 0) " · 급제동 ${p.decelEvents}건(기록만)" else ""
+            return
+        }
+        val result = append(
+            PenaltyConfirmed(
+                tripId = p.tripId, atMs = clock.nowMs(), fullWon = full,
+                accelEvents = p.accelEvents, accelRaw = p.accelCost.toPlainString(),
+                idleSeconds = p.idleSeconds, idleEvalSeconds = p.idleEvalSeconds, idleRaw = p.idleCost.toPlainString(),
+                speedingKm = p.speedingKm.toPlainString(), speedingRaw = p.speedingCost.toPlainString(), decelEvents = p.decelEvents,
+            ),
+        ) ?: run { log("PENALTY duplicate trip=${p.tripId} ignored"); return }
+        val applied = result.penaltyAppliedWon ?: 0
+        val st = ledger.state
+        log("PENALTY trip=${p.tripId} full=$full applied=$applied level=${st.level} accrual=${st.accrualWon}")
+        trip = TripUi(p, applied, progress.totalSaved(st))
+        val parts = listOfNotNull(
+            "급가속 ${p.accelEvents}건 ${WonFormat.screen(p.accelCost.toWon())}".takeIf { p.accelEvents > 0 },
+            "공회전 ${p.idleSeconds / 60}분(3분 초과 ${p.idleEvalSeconds / 60}분) ${WonFormat.screen(p.idleCost.toWon())}".takeIf { p.idleEvalSeconds > 0 },
+            "과속 ${f2(p.speedingKm).trimEnd('0').trimEnd('.')}km ${WonFormat.screen(p.speedingCost.toWon())}".takeIf { p.speedingCost.signum() > 0 },
+            "급제동 ${p.decelEvents}건(기록만)".takeIf { p.decelEvents > 0 },
+        )
+        lastResult = "이번 주행 ${WonFormat.screen(full)} 차감 · " + parts.joinToString(" · ") +
+            if (applied < full) "\n레벨 적립액 ${WonFormat.screen(applied)}까지만 줄었어요 · 누적 ${WonFormat.screen(progress.totalSaved(st))}은 그대로예요(레벨 달성 금액)" else ""
+        lossResult = lastResult
+        reaction = Reaction("trip-${p.tripId}", happy = false)
+        val reasons = listOfNotNull("급가속".takeIf { p.accelEvents > 0 }, "공회전".takeIf { p.idleEvalSeconds > 0 }, "과속".takeIf { p.speedingCost.signum() > 0 })
+        say(lines().tripPenalty(progress.food(st.level).takeIf { st.level > 0 }, full, reasons, floored = applied < full))
+    }
+
+    private fun f1(v: Double): String = String.format(java.util.Locale.ROOT, "%.1f", v)
+    private fun f2(v: java.math.BigDecimal): String = v.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+
     private fun onRefill(d: RefillDetected) {
         if (ledger.isDetectionHandled(d.id)) return
         pass.clear() // a refill happened: not a pass
@@ -919,7 +1096,8 @@ class ZzanController(
                 approval = Approval.SETTLED
                 val s = ledger.state
                 log("SETTLE amount=${decision.amountWon} level=${s.level} accrual=${s.accrualWon} remaining=${progress.remainingToNext(s)} reached=${result.levelsReached}")
-                lastResult = "$qtyText 확인 · ${WonFormat.screen(decision.amountWon)} 절약 확정"
+                lastResult = "$qtyText 확인 · ${WonFormat.screen(decision.amountWon)} 절약 확정" +
+                    if (rec.mode == CompareMode.ROUTE_TOTAL) " (시간비용 포함)" else ""
                 // Voice is fine while driving; the level-up line and screen wait for a stop (R-46).
                 val leveledUp = result.levelsReached.isNotEmpty()
                 if (!leveledUp || parked != true) say(lines().savingConfirmed(decision.amountWon))
@@ -963,6 +1141,7 @@ class ZzanController(
         log("OPP amount=$amount applied=${result.penaltyAppliedWon ?: 0} level=${s.level} accrual=${s.accrualWon}")
         if (amount > 0) {
             lastResult = "${Josa.reul(rec.best.offer.name)} 그냥 지나쳐서 ${WonFormat.screen(amount)}을 뺐어요 (기회비용)"
+            lossResult = lastResult
             reaction = Reaction("opp-$recId", happy = false)
             val line = lines().opportunityCost(rec.best.offer.name, amount)
             if (parked == true) say(line) else pendingParkedLine = line
@@ -1086,6 +1265,9 @@ class ZzanController(
             routes = routeComparison,
             routesPending = routesPending,
             wage = prefs.wage,
+            advice = advice,
+            trip = trip,
+            resultIsLoss = lastResult != null && lastResult == lossResult,
         )
     }
 
@@ -1104,6 +1286,9 @@ class ZzanController(
         const val LISTEN_WINDOW_MS = 5_000L
 
         /** Skips that mean an approved plan did not work out: the character looks sad. */
+        /** At most one short line a minute while driving (sample time). */
+        private const val NUDGE_GAP_MS = 60_000L
+
         private val SAD_REASONS = setOf(SkipReason.OTHER_STATION, SkipReason.NOT_POSITIVE, SkipReason.EXPIRED, SkipReason.NO_LOCATION)
 
         /** Live runtime log tag (scripts/e2e-scenario-b.sh reads it). */

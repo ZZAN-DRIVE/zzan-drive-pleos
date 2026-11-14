@@ -77,6 +77,7 @@ class DiagnosticsActivity : Activity() {
     private lateinit var listenButton: Button
     private var locationListener: FusedLocationListener? = null
     private val vehicleValues = linkedMapOf<String, String>()
+    private val efficiencyValues = linkedMapOf<String, String>()
     private val main = Handler(Looper.getMainLooper())
     private var selfTest = false
     private var sttSelfTested = false
@@ -174,20 +175,58 @@ class DiagnosticsActivity : Activity() {
         name: String,
         check: (onComplete: (CapabilityConfig) -> Unit, onFailed: (Exception) -> Unit) -> Unit,
         read: (onComplete: (T?) -> Unit, onFailed: (Exception) -> Unit) -> Unit,
+        sink: (String, String) -> Unit = ::vehicleValue,
         format: (T) -> String,
     ) {
         runCatching {
             check({ config ->
                 if (config.accessType.name !in setOf("READ", "READ_WRITE")) {
-                    vehicleValue(name, "미지원(${config.accessType})")
+                    sink(name, "미지원(${config.accessType})")
                 } else {
                     runCatching {
-                        read({ v -> vehicleValue(name, v?.let(format) ?: "null") },
-                            { e -> vehicleValue(name, describe(e)) })
-                    }.onFailure { vehicleValue(name, describe(it)) }
+                        read({ v -> sink(name, v?.let(format) ?: "null") },
+                            { e -> sink(name, describe(e)) })
+                    }.onFailure { sink(name, describe(it)) }
                 }
-            }, { e -> vehicleValue(name, describe(e)) })
-        }.onFailure { vehicleValue(name, "ERROR ${it.message}") }
+            }, { e -> sink(name, describe(e)) })
+        }.onFailure { sink(name, "ERROR ${it.message}") }
+    }
+
+    private fun efficiencyValue(name: String, value: String) {
+        efficiencyValues[name] = value
+        report("Vehicle 효율", efficiencyValues.entries.joinToString(" · ") { "${it.key} ${it.value}" })
+    }
+
+    /** 전비(km/kWh)와 연비(L/100km): 차가 주는 값이 있으면 추천 계산에 쓸 수 있는지 보려는 읽기. */
+    private fun readEfficiency() {
+        val ev = vehicle.getEvBattery()
+        val fuel = vehicle.getFuel()
+        fun kmPerKwh(v: Float) = "%.2fkm/kWh".format(v)
+        fun lPer100(v: Float) = "%.2fL/100km".format(v)
+        readWithCapability<Float>("전비 이번주행",
+            { ok, err -> ev.checkCurrentEvEfficiencyCapabilities(ok, err) },
+            { ok, err -> ev.getCurrentEvEfficiency(ok, err) }, ::efficiencyValue, ::kmPerKwh)
+        readWithCapability<Float>("전비 누적",
+            { ok, err -> ev.checkCumulativeEvEfficiencyCapabilities(ok, err) },
+            { ok, err -> ev.getCumulativeEvEfficiency(ok, err) }, ::efficiencyValue, ::kmPerKwh)
+        readWithCapability<Float>("전비 충전후",
+            { ok, err -> ev.checkSinceChargeEvEfficiencyCapabilities(ok, err) },
+            { ok, err -> ev.getSinceChargeEvEfficiency(ok, err) }, ::efficiencyValue, ::kmPerKwh)
+        readWithCapability<Float>("전비 순간",
+            { ok, err -> ev.checkInstantaneousEvEfficiencyCapabilities(ok, err) },
+            { ok, err -> ev.getInstantaneousEvEfficiency(ok, err) }, ::efficiencyValue, ::kmPerKwh)
+        readWithCapability<Float>("연비 이번주행",
+            { ok, err -> fuel.checkCurrentFuelEconomyCapabilities(ok, err) },
+            { ok, err -> fuel.getCurrentFuelEconomy(ok, err) }, ::efficiencyValue, ::lPer100)
+        readWithCapability<Float>("연비 누적",
+            { ok, err -> fuel.checkCumulativeFuelEconomyCapabilities(ok, err) },
+            { ok, err -> fuel.getCumulativeFuelEconomy(ok, err) }, ::efficiencyValue, ::lPer100)
+        readWithCapability<Float>("연비 주유후",
+            { ok, err -> fuel.checkSinceChargeFuelEconomyCapabilities(ok, err) },
+            { ok, err -> fuel.getSinceChargeFuelEconomy(ok, err) }, ::efficiencyValue, ::lPer100)
+        readWithCapability<Float>("연비 순간",
+            { ok, err -> fuel.checkInstantaneousFuelEconomyCapabilities(ok, err) },
+            { ok, err -> fuel.getInstantaneousFuelEconomy(ok, err) }, ::efficiencyValue, ::lPer100)
     }
 
     private fun readVehicle() {
@@ -210,6 +249,7 @@ class DiagnosticsActivity : Activity() {
                 { g -> vehicleValue("기어", g?.toString() ?: "null") },
                 { e -> vehicleValue("기어", describe(e)) })
         }.onFailure { vehicleValue("기어", describe(it)) }
+        runCatching { readEfficiency() }.onFailure { efficiencyValue("읽기", describe(it)) }
     }
 
     /** Fuel (ICE) and battery SoC (EV) subscriptions; the unsupported one reports its error. */

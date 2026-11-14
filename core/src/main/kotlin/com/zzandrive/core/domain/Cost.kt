@@ -28,8 +28,10 @@ data class CostBreakdown(
     val energyCost: BigDecimal,
     val detourCost: BigDecimal,
     val toll: BigDecimal,
+    /** 시간비용 = 주행 시간 × 시급; only the whole-route comparison has it (spec D-32). */
+    val timeCost: BigDecimal = BigDecimal.ZERO,
 ) {
-    val total: BigDecimal get() = energyCost.add(detourCost, MC).add(toll, MC)
+    val total: BigDecimal get() = energyCost.add(detourCost, MC).add(toll, MC).add(timeCost, MC)
 }
 
 data class RouteSegment(val distanceKm: BigDecimal, val efficiency: BigDecimal, val unitPrice: BigDecimal)
@@ -69,6 +71,49 @@ object CostCalculator {
             toll = offer.extraToll,
         )
 
+    /**
+     * 총 지출액 of the route that stops at this station (기획 계산식, spec D-32):
+     * 전체 주행 거리 ÷ 연비·전비 × 기준 단가 + 예정량 × (이곳 단가 − 기준 단가) + 통행료 + 주행 시간 × 시급.
+     * In the breakdown: [CostBreakdown.detourCost] is the drive, [CostBreakdown.energyCost] the purchase difference
+     * (negative where the place is cheaper than the reference price), then toll and time.
+     */
+    fun routeTotal(
+        quantity: BigDecimal,
+        offer: StationOffer,
+        efficiency: BigDecimal,
+        referencePrice: BigDecimal,
+        wagePerHour: BigDecimal,
+    ): CostBreakdown {
+        val leg = requireNotNull(offer.route) { "no whole-route numbers for ${offer.id}" }
+        return CostBreakdown(
+            offer = offer,
+            quantity = quantity,
+            efficiency = efficiency,
+            energyCost = quantity.multiply(offer.unitPrice.subtract(referencePrice, MC), MC),
+            detourCost = energyCost(leg.km, efficiency, referencePrice),
+            toll = leg.tollWon,
+            timeCost = leg.minutes.divide(SIXTY, MC).multiply(wagePerHour, MC),
+        )
+    }
+
+    /**
+     * The one place that turns a compare mode into a cost, so the card, the settlement and a recommendation read back
+     * from the ledger always use the same formula (V-09).
+     */
+    fun cost(
+        mode: CompareMode,
+        quantity: BigDecimal,
+        offer: StationOffer,
+        efficiency: BigDecimal,
+        referencePrice: BigDecimal?,
+        wagePerHour: BigDecimal?,
+    ): CostBreakdown = when {
+        mode == CompareMode.ROUTE_TOTAL && offer.route != null && referencePrice != null ->
+            routeTotal(quantity, offer, efficiency, referencePrice, wagePerHour ?: PlanReference.TIME_VALUE_PER_HOUR)
+        mode.pricesCompared || referencePrice == null -> realCost(quantity, offer, efficiency)
+        else -> travelCost(offer, efficiency, referencePrice)
+    }
+
     /** 예상 운행비 = 최종 통행료 + Σ 구간별 (거리 ÷ 연비·전비 × 단가) (spec F04). */
     fun routeOperatingCost(finalToll: BigDecimal, segments: List<RouteSegment>): BigDecimal =
         segments.fold(finalToll) { acc, s -> acc.add(energyCost(s.distanceKm, s.efficiency, s.unitPrice), MC) }
@@ -97,4 +142,7 @@ object PlanReference {
 
     /** Default time value (D-08). */
     val TIME_VALUE_PER_HOUR: BigDecimal = bd("5000")
+
+    /** 기획서 3-1 "연비(특정 사양 공인값)": what the app calculates with (spec D-14). */
+    fun surveyEfficiency(type: EnergyType): Efficiency = Efficiency(survey(type).efficiency, DataOrigin.SURVEY)
 }

@@ -5,6 +5,7 @@ import com.zzandrive.core.domain.CreditRule
 import com.zzandrive.core.domain.PlanContext
 import com.zzandrive.core.domain.Reachability
 import com.zzandrive.core.domain.RouteBranch
+import com.zzandrive.core.domain.RoutePolicy
 import com.zzandrive.core.domain.FillAnswer
 import com.zzandrive.core.domain.PlanReference
 import com.zzandrive.core.domain.PlanRequest
@@ -13,6 +14,8 @@ import com.zzandrive.core.domain.bd
 import com.zzandrive.core.domain.toWon
 import com.zzandrive.core.settlement.SettlementDecision
 import com.zzandrive.core.settlement.SettlementPolicy
+import com.zzandrive.core.verification.DrivingEvent
+import com.zzandrive.core.verification.DrivingMonitor
 import com.zzandrive.core.verification.RefillConfig
 import com.zzandrive.core.verification.RefillDetected
 import com.zzandrive.core.verification.RefillDetector
@@ -25,6 +28,10 @@ import org.junit.jupiter.api.Test
 
 /** The demo-mode timelines must produce the plan's numbers through the real core logic. */
 class ReplayTest {
+    /** 기획서 3-1의 공인 전비·연비: what the app calculates with (spec D-14). */
+    private val ev = PlanReference.surveyEfficiency(EnergyType.ELECTRIC)
+    private val fuel = PlanReference.surveyEfficiency(EnergyType.GASOLINE)
+
     private fun detections(type: EnergyType, config: RefillConfig, vararg phases: List<TimedSample>): List<RefillDetected> {
         val clock = ManualScheduler()
         val source = ReplayVehicleSource(type, clock, clock)
@@ -79,28 +86,31 @@ class ReplayTest {
     }
 
     @Test
-    fun `scenario B search - 40 kWh around here gives 2,308 won, the 6,2 km station left out`() {
+    fun `scenario B search - 40 kWh around here gives 2,323 won, the 6,2 km station left out`() {
         val offers = FixtureStationSource().candidates(EnergyType.ELECTRIC, FixtureStations.HOME)
         val rec = Recommender.plan(
-            PlanRequest("find-b", 0, EnergyType.ELECTRIC, offers, PlanReference.DEMO_EV_EFFICIENCY, FillAnswer.Quantity(bd(40)), room = bd("42.57")),
+            PlanRequest("find-b", 0, EnergyType.ELECTRIC, offers, ev, FillAnswer.Quantity(bd(40)), room = bd("42.57")),
         )!!
         assertEquals(CompareMode.COST_INCLUDED, rec.mode)
         assertEquals(listOf("ev-far"), rec.excludedIds)
         assertEquals("ev-a", rec.baseline.offer.id)
         assertEquals("ev-b", rec.best.offer.id)
-        assertEquals(2308L, rec.expectedSaving.toWon())
-        // Charging 40 kWh at B from the parked timeline's 45 % settles the same 2,308 won.
+        assertEquals(2323L, rec.expectedSaving.toWon()) // 14,116.67 − 11,793.33 at the official 6.0 km/kWh
+        // Charging 40 kWh at B from the parked timeline's 45 % settles the same 2,323 won.
         val found = detections(EnergyType.ELECTRIC, RefillConfig.EV, Scenarios.evParked(), Scenarios.evChargeAtB(startKwh = 34.83))
         val d = found.single()
         assertEquals(40.0, d.quantity, 1e-9)
         val used = StationMatcher.match(d.location, offers.associate { it.id to it.location })
-        assertEquals(2308L, (SettlementPolicy.decide(rec, true, d, used) as SettlementDecision.Credit).amountWon)
+        assertEquals(2323L, (SettlementPolicy.decide(rec, true, d, used) as SettlementDecision.Credit).amountWon)
+        // The amount as money: 10,000원 ÷ 350원 = 28.57 kWh for both places.
+        val money = Recommender.plan(PlanRequest("m", 0, EnergyType.ELECTRIC, offers, ev, FillAnswer.Money(bd(10000)), room = bd("42.57")))!!
+        assertEquals(1638L, money.expectedSaving.toWon())
     }
 
     @Test
     fun `search around the saved place finds nothing within 5 km - the nearest one only`() {
         val offers = FixtureStationSource().candidates(EnergyType.ELECTRIC, FixtureStations.PARENTS)
-        val rec = Recommender.plan(PlanRequest("far", 0, EnergyType.ELECTRIC, offers, PlanReference.DEMO_EV_EFFICIENCY, FillAnswer.Quantity(bd(40))))!!
+        val rec = Recommender.plan(PlanRequest("far", 0, EnergyType.ELECTRIC, offers, ev, FillAnswer.Quantity(bd(40))))!!
         assertEquals(CompareMode.NEAREST_ONLY, rec.mode)
         assertEquals("ev-p1", rec.best.offer.id)
         assertEquals(0L, rec.expectedSaving.toWon())
@@ -109,38 +119,70 @@ class ReplayTest {
     @Test
     fun `fuel search compares A and C - B (6 km of road) is left out`() {
         val offers = FixtureStationSource().candidates(EnergyType.GASOLINE, FixtureStations.HOME)
-        val rec = Recommender.plan(PlanRequest("find-a", 0, EnergyType.GASOLINE, offers, PlanReference.DEMO_FUEL_EFFICIENCY, FillAnswer.Quantity(bd(50))))!!
+        val rec = Recommender.plan(PlanRequest("find-a", 0, EnergyType.GASOLINE, offers, fuel, FillAnswer.Quantity(bd(50))))!!
         assertEquals(listOf("fuel-b"), rec.excludedIds)
         assertEquals("fuel-c", rec.best.offer.id)
-        assertEquals(668L, rec.expectedSaving.toWon()) // 85,340 − (84,000 + 672)
+        assertEquals(783L, rec.expectedSaving.toWon()) // 85,222.22 − (84,000 + 439.22) at 15.3 km/L
     }
 
     @Test
-    fun `scenario A - 220 km with 6 L is out of range, the reachable pair gives 860 won against the costliest`() {
+    fun `scenario A - 100 km with 6 L is out of range, the three cheapest whole routes, 676 won against the dearest of them`() {
         val route = FixtureRouteSource().active(EnergyType.GASOLINE)!!
-        val eff = PlanReference.DEMO_FUEL_EFFICIENCY.kmPerUnit // 10 km/L
+        val eff = fuel.kmPerUnit // 15.3 km/L
         val threshold = bd(12) // 20 % of 60 L
-        val branch = Reachability.classify(bd(6), threshold, route.remainingKm, eff)
-        assertEquals(RouteBranch.UNREACHABLE, branch)
-        val limit = Reachability.limitKm(RouteBranch.UNREACHABLE, bd(6), threshold, eff)!!
-        val reachable = Reachability.reachable(route.stations, limit)
-        assertEquals(listOf("fuel-a", "fuel-b"), reachable.map { it.id })
+        assertEquals(RouteBranch.UNREACHABLE, Reachability.classify(bd(6), threshold, route.remainingKm, eff))
+        assertEquals(false, Reachability.canReach(bd(6), threshold, route.remainingKm, eff))
+        val range = Reachability.rangeKm(bd(6), threshold, eff)
+        assertEquals(0, bd("82.62").compareTo(range))
+        val reachable = Reachability.reachable(route.stations, range)
+        assertEquals(listOf("route-a", "route-b", "route-c", "route-d", "route-e"), reachable.map { it.id })
         val rec = Recommender.plan(
-            PlanRequest("a", 0, EnergyType.GASOLINE, reachable, PlanReference.DEMO_FUEL_EFFICIENCY, FillAnswer.Quantity(bd(50)), context = PlanContext.MustStop(branch)),
+            PlanRequest("a", 0, EnergyType.GASOLINE, reachable, fuel, FillAnswer.Quantity(bd(30)), context = PlanContext.Destination(noStop = null)),
         )!!
+        assertEquals(CompareMode.ROUTE_TOTAL, rec.mode)
         assertEquals(CreditRule.VS_WORST, rec.creditRule)
-        assertEquals("fuel-b", rec.best.offer.id)
-        assertEquals(860L, rec.expectedSaving.toWon())
-        val d = detections(EnergyType.GASOLINE, RefillConfig.FUEL, Scenarios.fuelLow(), Scenarios.fuelRefillAtB()).single()
+        assertEquals(listOf("route-c", "route-d", "route-b"), rec.ranked.map { it.offer.id })
+        assertEquals(listOf(15_134L, 15_450L, 15_810L), rec.ranked.map { it.total.toWon() })
+        assertEquals(listOf(0L, -316L, -676L), rec.ranked.map { rec.best.total.subtract(it.total).toWon() })
+        assertEquals(676L, rec.expectedSaving.toWon())
+        val d = detections(
+            EnergyType.GASOLINE, RefillConfig.FUEL, Scenarios.fuelLow(),
+            Scenarios.fuelRefillAtB(addL = 30.0, at = FixtureStations.ROUTE_C.location!!),
+        ).single()
+        assertEquals(30.0, d.quantity, 1e-9)
         val used = StationMatcher.match(d.location, rec.ranked.associate { it.offer.id to it.offer.location })
-        assertEquals(860L, (SettlementPolicy.decide(rec, true, d, used) as SettlementDecision.Credit).amountWon)
+        assertEquals("route-c", used)
+        assertEquals(676L, (SettlementPolicy.decide(rec, true, d, used) as SettlementDecision.Credit).amountWon)
+        // The fastest way on without a stop is known too (it joins the comparison when the destination is within range).
+        assertEquals("주유 없이 가기", RoutePolicy.noStopOffer(route, EnergyType.GASOLINE, PlanReference.survey(EnergyType.GASOLINE).unitPrice)!!.name)
         // Electric cars have no route in this fixture: the search stays around the current location.
         assertEquals(null, FixtureRouteSource().active(EnergyType.ELECTRIC))
     }
 
     @Test
+    fun `scenario C - the habit trip comes to 377 won however fast it is played`() {
+        val clock = ManualScheduler()
+        val source = ReplayVehicleSource(EnergyType.GASOLINE, clock, clock)
+        val monitor = DrivingMonitor(EnergyType.GASOLINE)
+        val events = mutableListOf<DrivingEvent>()
+        source.subscribe { s -> if (s is DriveSample) events += monitor.onSample(s) }
+        val phase = Scenarios.habitTrip()
+        source.play(phase)
+        clock.advanceBy(phase.maxOf { it.offsetMs } + 1)
+        val p = events.filterIsInstance<DrivingEvent.TripEnded>().single().penalty
+        assertEquals(2, p.accelEvents) // a harsh start and a harsh acceleration
+        assertEquals(480L, p.idleSeconds)
+        assertEquals(300L, p.idleEvalSeconds)
+        assertEquals(1, p.decelEvents)
+        assertEquals("376.90", p.total.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()) // 272.01 + 93.65 + 11.25
+        assertEquals(377L, p.fullWon)
+        assertEquals(1, events.count { it is DrivingEvent.IdleOver })
+        assertEquals(1, events.count { it is DrivingEvent.SpeedingStarted })
+    }
+
+    @Test
     fun `fixture stations are far enough apart for a 300 m match`() {
-        val pts = (FixtureStations.NEAR_HOME + FixtureStations.NEAR_PARENTS).mapNotNull { it.location }
+        val pts = (FixtureStations.NEAR_HOME + FixtureStations.NEAR_PARENTS + FixtureStations.ON_THE_WAY).mapNotNull { it.location }
         for (i in pts.indices) for (j in i + 1 until pts.size) {
             assertTrue(StationMatcher.distanceM(pts[i], pts[j]) > 300.0)
         }
