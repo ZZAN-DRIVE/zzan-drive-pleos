@@ -94,6 +94,8 @@ data class UiState(
     val persona: Persona?,
     val character: CharacterState,
     val remainingWon: Long?,
+    /** 레벨 적립액 ÷ 레벨업 목표액, 0..1 (1 at the top level): the 다음 레벨 ring and the bolt above the character. */
+    val levelShare: Float,
     val totalSavedWon: Long,
     val todayNetWon: Long,
     val monthNetWon: Long,
@@ -648,12 +650,14 @@ class ZzanController(
     fun seedScenarioC() = seed(level = 1, accrual = 300, persona = Persona.ZZANDORI)
 
     /**
-     * Debug/demo: jump to [level] (accrual 0) and play that level's level-up screen and line when parked,
-     * to walk through all 11 levels. Replaces the savings record, like the scenario seeds.
+     * Debug/demo: jump to [level] with [percent] (0..99) of its level-up target collected, and play that level's level-up
+     * screen and line when parked, to walk through all 11 levels and the bolt's fill. Replaces the savings record, like the
+     * scenario seeds.
      */
-    fun previewLevel(level: Int, persona: Persona? = null) {
+    fun previewLevel(level: Int, persona: Persona? = null, percent: Int = 0) {
         val l = level.coerceIn(0, progress.maxLevel)
-        seed(level = l, accrual = 0, persona = persona ?: prefs.persona ?: Persona.ZZANDORI)
+        val accrual = (progress.remainingToNext(CharacterState(l, 0)) ?: 0L) * percent.coerceIn(0, 99) / 100
+        seed(level = l, accrual = accrual, persona = persona ?: prefs.persona ?: Persona.ZZANDORI)
         if (l == 0) return
         prefs.lastCelebratedLevel = l - 1
         prefs.lastAnnouncedLevel = l - 1
@@ -1256,6 +1260,7 @@ class ZzanController(
             persona = prefs.persona,
             character = s,
             remainingWon = progress.remainingToNext(s),
+            levelShare = progress.levelShare(s),
             totalSavedWon = progress.totalSaved(s),
             todayNetWon = ledger.dailyNet(today),
             monthNetWon = ledger.monthlyNet(YearMonth.from(today)),

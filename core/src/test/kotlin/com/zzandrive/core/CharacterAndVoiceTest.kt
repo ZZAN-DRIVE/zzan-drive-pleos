@@ -25,6 +25,19 @@ class CharacterAndVoiceTest {
     }
 
     @Test
+    fun `level share is what the next-level ring and the bolt show`() {
+        assertEquals(0.75f, p.levelShare(CharacterState(2, 3000)), 1e-6f) // 시연 B start: 3,000 of 4,000
+        assertEquals(18, (p.levelShare(CharacterState(3, 1323)) * 100).toInt()) // 시연 B after the level-up: 1,323 of 7,000
+        assertEquals(66, (p.levelShare(CharacterState(0, 1000)) * 100).toInt()) // 시연 A start: 1,000 of 1,500
+        assertEquals(7, (p.levelShare(CharacterState(1, 176)) * 100).toInt()) // 시연 A after: 176 of 2,500
+        assertEquals(12, (p.levelShare(CharacterState(1, 300)) * 100).toInt()) // 시연 C start: 300 of 2,500
+        assertEquals(70, (p.levelShare(CharacterState(0, 1050)) * 100).toInt())
+        assertEquals(0f, p.levelShare(CharacterState(0, 0)))
+        assertEquals(1f, p.levelShare(CharacterState(10, 0))) // the top level has no next one: full
+        assertEquals(1f, p.levelShare(CharacterState(10, 50_000)))
+    }
+
+    @Test
     fun `TV-10 level 2 to 3 with penalty floor and carry over`() {
         var s = CharacterState(2, 0)
         assertEquals(4000L, p.totalSaved(s))

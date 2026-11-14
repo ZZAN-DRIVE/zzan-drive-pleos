@@ -155,6 +155,7 @@ play_b() {
   check "level-up screen" "^SHOW level-up 3" 10
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
   check "eats 짜장면" "^CLIP .*_lv0?3_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
+  check "bolt: 1,323 of 7,000원" "^BOLT 18 lv=3( |\$)" 10
   hold 3
   record_stop
 }
@@ -289,9 +290,10 @@ play_b_auto() {
   check "settled 2,323원 → level 3" "^SETTLE amount=2323 level=3 accrual=1323 remaining=5677" 10
   check "level-up line" "^SAY 짜장면 레벨 달성! 파스타까지 약 5,700원 남았어" 10
   check "level-up screen" "^SHOW level-up 3" 10
-  # The character celebrates in place, then eats the new food in a loop.
+  # The character celebrates in place, then eats the new food in a loop; the bolt above the head starts again.
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
   check "eats 짜장면" "^CLIP .*_lv0?3_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
+  check "bolt: 1,323 of 7,000원" "^BOLT 18 lv=3( |\$)" 10
   hold 3
   record_stop
 }
@@ -341,6 +343,7 @@ play_a() {
   check "level-up screen" "^SHOW level-up 1" 10
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
   check "eats 삼각김밥" "^CLIP .*_lv0?1_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
+  check "bolt: 176 of 2,500원" "^BOLT 7 lv=1( |\$)" 10
   hold 3
   record_stop
   app_front --es zzan.demo off
@@ -459,6 +462,7 @@ play_habit() {
   scene 3 "주행 끝 · 정산" "272.01 + 93.65 + 11.25 = 376.90 → 377원을 한 번 차감. 레벨 적립액은 300원까지만 줄고 누적 1,500원(레벨 1 달성 금액)은 그대로, 이번 달 손익에는 377원 전부"
   check "trip totals" "^TRIP end id=trip-[0-9]+ accel=2:272\.01 idle=480s/300s:93\.65 speeding=6\.25km:11\.25 decel=1 raw=376\.90" 30
   check "deducted once, stopping at the level's accrual" "^PENALTY trip=trip-[0-9]+ full=377 applied=300 level=1 accrual=0" 5
+  check "the bolt empties with it (the level stays)" "^BOLT 0 lv=1( |\$)" 5
   check "told after the stop" "^SAY 앗, 급가속, 공회전, 과속 때문에 이번 레벨 적립액이 다 줄었어…" 5
   hold 6
   local n

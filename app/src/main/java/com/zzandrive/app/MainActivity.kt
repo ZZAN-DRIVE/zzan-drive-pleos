@@ -345,6 +345,7 @@ class MainActivity : Activity() {
             "level" -> c.previewLevel(
                 i.getIntExtra(EXTRA_LEVEL, 0),
                 i.getStringExtra(EXTRA_PERSONA)?.let { p -> Persona.entries.firstOrNull { it.name.equals(p, ignoreCase = true) } },
+                i.getIntExtra(EXTRA_PERCENT, 0),
             )
             // Popups for checks and screenshots: popup --es zzan.arg settings|demos|notices|reset|persona|close.
             "popup" -> when (i.getStringExtra(EXTRA_ARG)) {
@@ -464,6 +465,7 @@ class MainActivity : Activity() {
             celebration.visibility = View.GONE
         }
         stage.setCharacter(who, charLevel)
+        stage.setGauge(boltFill(s))
         val reaction = s.reaction
         if (reaction != null && reaction.id != playedReaction && celebrate == null && motionOk) {
             playedReaction = reaction.id
@@ -498,6 +500,12 @@ class MainActivity : Activity() {
         renderBubble(s, moving, decision)
         listenBadge.visibility = if (s.listening) View.VISIBLE else View.GONE
     }
+
+    /**
+     * What the bolt above the character shows, 0..1 (spec D-40): how far the level is toward the next one, the same share
+     * as the 다음 레벨 ring. The one place that decides it.
+     */
+    private fun boltFill(s: UiState): Float = s.levelShare
 
     /** "11월 14일 (토)": the day the amounts of today and this month are counted for (Asia/Seoul). */
     private fun dateText(d: LocalDate): String = "${d.monthValue}월 ${d.dayOfMonth}일 (${"월화수목금토일"[d.dayOfWeek.value - 1]})"
@@ -687,12 +695,7 @@ class MainActivity : Activity() {
 
         val level = s.character.level
         val remaining = s.remainingWon
-        val target = (remaining ?: 0) + s.character.accrualWon
-        val share = when {
-            remaining == null -> 1f
-            target > 0 -> s.character.accrualWon.toFloat() / target
-            else -> 0f
-        }
+        val share = s.levelShare
         levelRing.fraction = share
         levelRing.value = if (remaining == null) "최고" else "${(share * 100).toInt()}%"
         val next = remaining?.let { "${progress.nextFood(level)}까지 ${WonFormat.screen(it)}" } ?: "최고 레벨이야"
@@ -2068,6 +2071,7 @@ class MainActivity : Activity() {
         const val EXTRA_DEMO = "zzan.demo"
         const val EXTRA_LEVEL = "zzan.level"
         const val EXTRA_PERSONA = "zzan.persona"
+        const val EXTRA_PERCENT = "zzan.percent"
         const val EXTRA_ARG = "zzan.arg"
 
         /** At or above this width the two columns sit side by side (Pleos: one app across the app area). */

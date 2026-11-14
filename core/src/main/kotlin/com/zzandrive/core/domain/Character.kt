@@ -88,6 +88,10 @@ class CharacterProgress(private val table: LevelTable = LevelTable.DEFAULT) {
     /** 레벨업까지 남은 금액; null at the top level. */
     fun remainingToNext(state: CharacterState): Long? = table.target(state.level)?.let { it - state.accrualWon }
 
+    /** 레벨 적립액 ÷ 레벨업 목표액, 0..1; 1 at the top level. The 다음 레벨 ring and the bolt above the character (D-40). */
+    fun levelShare(state: CharacterState): Float =
+        table.target(state.level)?.let { (state.accrualWon.toFloat() / it).coerceIn(0f, 1f) } ?: 1f
+
     val maxLevel: Int get() = table.maxLevel
     fun food(level: Int): String = table.food(level)
     fun nextFood(level: Int): String? = if (level >= table.maxLevel) null else table.food(level + 1)

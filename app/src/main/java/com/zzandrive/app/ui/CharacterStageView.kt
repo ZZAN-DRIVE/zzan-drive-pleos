@@ -1,13 +1,16 @@
 package com.zzandrive.app.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.ImageDecoder
+import android.graphics.Rect
 import android.graphics.drawable.Animatable2
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import com.zzandrive.core.motion.CharacterClips
@@ -27,12 +30,14 @@ import kotlin.math.abs
  * - A new clip fades in over the previous one, which stays opaque underneath: clips whose first frame
  *   does not match the last one (the food appearing after a level-up) change smoothly, matching
  *   clips change invisibly.
+ * - The bolt above the head is a gauge ([setGauge], spec D-40): [BoltShade] empties it above the fill line on clips
+ *   drawn with a full bolt. The resting clip on screen follows a change; a new level's clip starts empty and fills up.
  * - Decoding and drawing stop while the stage cannot be seen ([pause], hidden, [motionAllowed] off).
  *   Coming back decodes the current clip again, so no callback from a stopped drawable is trusted.
  * - Without any clip for the character it falls back to [CharacterArtView].
  */
 class CharacterStageView(context: Context) : FrameLayout(context) {
-    /** Log tag of the runtime shown on screen (ZzanApp live, ZzanDemo demo); scripts read `CLIP` lines. */
+    /** Log tag of the runtime shown on screen (ZzanApp live, ZzanDemo demo); scripts read `CLIP` and `BOLT` lines. */
     var logTag: String = "ZzanApp"
 
     /** False holds the current frame: the car is moving (demo data), an overlay covers the stage, or a still picture is wanted. */
@@ -48,6 +53,9 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
     val borrowed: Boolean get() = clips.borrowed
 
     private val layers = Array(2) { ImageView(context).apply { scaleType = ImageView.ScaleType.CENTER_INSIDE } }
+    private val shades = Array(2) { BoltShade() }
+    private val layerClip = arrayOfNulls<Clip>(2) // what each layer shows
+    private val layerFill = FloatArray(2) { 1f } // and how full its bolt is
     private var front = 0
     private val placeholder = CharacterArtView(context)
 
@@ -63,6 +71,11 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
     private var lifecyclePaused = false
     private var shown = false
     private var running = false
+
+    private var gauge = 1f // the bolt asked for, 0..1
+    private var gaugeShown = 1f // the bolt on the resting clip, on its way to [gauge]
+    private var gaugeLevel: Int? = null // the level [gaugeShown] belongs to
+    private var gaugeAnimator: ValueAnimator? = null
 
     init {
         layers.forEach { addView(it, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
@@ -80,6 +93,19 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
     fun setPortrait(persona: Persona) {
         portrait = true
         setCharacter(persona, 0)
+    }
+
+    /**
+     * How full the bolt above the head is, 0..1 (spec D-40). The resting clip on screen moves there over [GAUGE_MS] while
+     * motion plays, at once otherwise. During a one-off clip the value waits for the resting clip to come back. Call it
+     * after [setCharacter] for the same state.
+     */
+    fun setGauge(fill: Float) {
+        val f = fill.coerceIn(0f, 1f)
+        if (f == gauge) return
+        gauge = f
+        Log.i(logTag, "BOLT ${(f * 100).toInt()} lv=$level")
+        if (resting()) moveGauge()
     }
 
     /**
@@ -166,14 +192,31 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
     private fun attach(clip: Clip, once: Boolean, d: Drawable, side: Int) {
         decodedSide = side
         layers.forEach { it.animate().cancel() }
-        val outgoing = layers[front]
-        outgoing.alpha = 1f
-        val incoming = layers[1 - front]
-        release(incoming)
+        val out = front
+        layers[out].alpha = 1f
+        val i = 1 - out
+        val incoming = layers[i]
+        release(i)
         incoming.setImageDrawable(d)
+        layerClip[i] = clip
         incoming.alpha = 0f
         incoming.bringToFront()
-        front = 1 - front
+        front = i
+        if (once) {
+            gaugeAnimator?.cancel() // the resting clip picks up from here when it comes back
+            shade(i, gauge)
+        } else {
+            if (clip.level != gaugeLevel) { // a new level's bolt starts empty, then fills up to what was collected
+                gaugeLevel = clip.level
+                gaugeShown = 0f
+            }
+            shade(i, gaugeShown)?.let { box -> // on the screen, for checking captures against the designer's files
+                val at = IntArray(2).also(incoming::getLocationOnScreen)
+                box.offset(at[0], at[1])
+                Log.i(logTag, "BOLT box=${box.left},${box.top},${box.right},${box.bottom} ${d.intrinsicWidth}px")
+            }
+            moveGauge()
+        }
         if (d is AnimatedImageDrawable) {
             d.repeatCount = if (once) 0 else AnimatedImageDrawable.REPEAT_INFINITE
             if (once) {
@@ -189,7 +232,36 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
                 Log.i(logTag, "CLIP ${clip.name} ${d.intrinsicWidth}px")
             }
         }
-        incoming.animate().alpha(1f).setDuration(FADE_MS).withEndAction { release(outgoing) }.start()
+        incoming.animate().alpha(1f).setDuration(FADE_MS).withEndAction { release(out) }.start()
+    }
+
+    /** The front layer shows the resting clip (not a one-off, and not one about to be replaced). */
+    private fun resting(): Boolean = !currentOnce && current != null && layerClip[front] == current
+
+    /** Brings the resting clip's bolt to [gauge]: over [GAUGE_MS] while motion plays, at once otherwise. */
+    private fun moveGauge() {
+        gaugeAnimator?.cancel()
+        gaugeAnimator = null
+        if (!running || gaugeShown == gauge) {
+            gaugeShown = gauge
+            if (resting()) shade(front, gauge)
+            return
+        }
+        gaugeAnimator = ValueAnimator.ofFloat(gaugeShown, gauge).apply {
+            duration = GAUGE_MS
+            interpolator = DecelerateInterpolator(1.6f)
+            addUpdateListener { a ->
+                gaugeShown = a.animatedValue as Float
+                if (resting()) shade(front, gaugeShown)
+            }
+            start()
+        }
+    }
+
+    /** Puts [fill] of the bolt on layer [i]. Returns the bolt's box on the layer, or null when the layer's clip has no gauge. */
+    private fun shade(i: Int, fill: Float): Rect? {
+        layerFill[i] = fill
+        return shades[i].apply(layers[i], layerClip[i], fill, logTag)
     }
 
     private fun updateRunning() {
@@ -201,6 +273,7 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
             if (c != null) show(c, currentOnce) else showRest()
         } else {
             token++ // drop decodes in flight
+            gaugeAnimator?.end() // a still picture shows the bolt where it is going
             layers.forEach { iv -> (iv.drawable as? AnimatedImageDrawable)?.let { it.clearAnimationCallbacks(); it.stop() } }
             if (current != null) Log.i(logTag, "CLIP stop")
         }
@@ -221,9 +294,17 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
         if (decodedSide == 0 || (!currentOnce && abs(side - decodedSide) > RESIZE_SLACK)) show(c, currentOnce)
     }
 
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        // The picture can move without being decoded again (a size change within RESIZE_SLACK): its bolt moves with it.
+        if (changed) layers.indices.forEach { i -> if (layerClip[i] != null) shade(i, layerFill[i]) }
+    }
+
     override fun onDetachedFromWindow() {
         token++
-        layers.forEach(::release)
+        gaugeAnimator?.cancel()
+        gaugeAnimator = null
+        layers.indices.forEach(::release)
         decodedSide = 0
         running = false
         super.onDetachedFromWindow()
@@ -231,16 +312,20 @@ class CharacterStageView(context: Context) : FrameLayout(context) {
 
     private fun targetSide(): Int = minOf(width, height, MAX_SIDE).let { if (it < MIN_SIDE) 0 else it }
 
-    private fun release(iv: ImageView) {
+    private fun release(i: Int) {
+        val iv = layers[i]
         (iv.drawable as? AnimatedImageDrawable)?.let {
             it.clearAnimationCallbacks()
             it.stop()
         }
         iv.setImageDrawable(null)
+        layerClip[i] = null
+        BoltShade.clear(iv)
     }
 
     companion object {
         private const val FADE_MS = 250L
+        private const val GAUGE_MS = 800L // as long as the rings take to fill (RingView)
         private const val MAX_SIDE = 720 // source size: never scale up
         private const val MIN_SIDE = 16
         private const val RESIZE_SLACK = 8
