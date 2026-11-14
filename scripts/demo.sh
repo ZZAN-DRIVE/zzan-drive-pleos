@@ -368,7 +368,7 @@ play_drive() {
     app_cmd hearpcm --es zzan.arg yes
     check "heard 응 (on-device STT)" "^HEARD text=응 expect=CONSENT intent=Yes" 25
   else
-    info "no macOS Korean voice (Flo) here: the answer is typed instead of recognized"
+    info "the spoken answer could not be made or copied (macOS Korean voice Flo, adb): it is typed instead of recognized"
     app_cmd hear --es zzan.arg "응"
     check "heard 응 (typed)" "^HEARD text=응 expect=CONSENT intent=Yes" 10
   fi

@@ -36,14 +36,18 @@ stt_clip() {
   say -v "$voice" -r 175 -o "$dir/$name.aiff" "$text" || return 1
   afconvert -f WAVE -d LEI16@16000 -c 1 "$dir/$name.aiff" "$dir/$name.wav" || return 1
   user="$(adb_s shell am get-current-user 2>/dev/null | tr -d '\r')"
-  # Written to a temporary name and renamed, then checked by size: the app must never read a half-written file
-  # (a command that arrives while the copy is still being written fails with "not a WAV file").
-  adb_s exec-in "run-as $ZZAN_APP_ID --user ${user:-0} sh -c 'mkdir -p files/stt && cat > files/stt/.$name.part && mv files/stt/.$name.part files/stt/$name.wav'" < "$dir/$name.wav"
+  # Written to a temporary name, checked by size, then renamed: the app must never read a half-written file
+  # (a command that arrives while the copy is still being written fails with "not a WAV file"). The size decides,
+  # not cat's exit status: adb can end the stream with an error after the last byte has arrived.
+  adb_s exec-in "run-as $ZZAN_APP_ID --user ${user:-0} sh -c 'mkdir -p files/stt && cat > files/stt/.$name.part'" < "$dir/$name.wav" || true
   local want got i
   want="$(wc -c < "$dir/$name.wav" | tr -d ' ')"
   for i in 1 2 3 4 5 6 7 8 9 10; do
-    got="$(adb_s shell run-as "$ZZAN_APP_ID" --user "${user:-0}" stat -c %s "files/stt/$name.wav" 2>/dev/null | tr -d '\r')"
-    [ "$got" = "$want" ] && return 0
+    got="$(adb_s shell run-as "$ZZAN_APP_ID" --user "${user:-0}" stat -c %s "files/stt/.$name.part" 2>/dev/null | tr -d '\r')"
+    if [ "$got" = "$want" ]; then
+      adb_s shell run-as "$ZZAN_APP_ID" --user "${user:-0}" mv "files/stt/.$name.part" "files/stt/$name.wav" >/dev/null 2>&1 && return 0
+      return 1
+    fi
     sleep 0.5
   done
   return 1
