@@ -30,7 +30,7 @@
 1. Pleos Connect Emulator 2.1.0을 켜고 APK를 설치합니다. debug 빌드가 이미 설치되어 있으면 서명이 달라 설치되지 않으므로 먼저 `adb uninstall com.zzandrive.app`을 실행합니다.
 
    ```bash
-   adb install apk/ZZANDRIVE_ZzanDrive_release.apk
+   adb install apk/ZzanFamily_ZzanDrive_release.apk
    ```
 
 2. 짠드라이브를 열고 캐릭터를 고릅니다. 이어서 위치 권한을 물으면 허용·거부 어느 쪽이든 괜찮습니다.
@@ -133,7 +133,7 @@
 
 ## APK 위치
 
-`apk/ZZANDRIVE_ZzanDrive_release.apk`
+`apk/ZzanFamily_ZzanDrive_release.apk`
 
 - 공모전 규칙의 `apk/팀명_앱이름_release.apk` 형식입니다.
 - 팀 서명 키로 서명한 release 빌드입니다(APK Signature Scheme v2·v3). ABI는 arm64-v8a와 x86_64입니다.

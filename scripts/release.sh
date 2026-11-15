@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the contest release APK, checks it, and puts it where the contest rules want it.
 #
-#   scripts/release.sh               # unit tests + release build → apk/ZZANDRIVE_ZzanDrive_release.apk
+#   scripts/release.sh               # unit tests + release build → apk/ZzanFamily_ZzanDrive_release.apk
 #   scripts/release.sh --install     # also install it on the Pleos emulator WITHOUT pre-granted permissions
 #   scripts/release.sh --out FILE    # write somewhere else (for example a trial with a throwaway key)
 #
@@ -21,7 +21,7 @@ source "$(dirname "$0")/lib/common.sh"
 
 usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; }
 INSTALL=0
-OUT="${ZZAN_APK_OUT:-apk/ZZANDRIVE_ZzanDrive_release.apk}"
+OUT="${ZZAN_APK_OUT:-apk/ZzanFamily_ZzanDrive_release.apk}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --install) INSTALL=1 ;;
