@@ -1,5 +1,6 @@
 package com.zzandrive.core.voice
 
+import com.zzandrive.core.domain.PlanReference
 import com.zzandrive.core.domain.toWon
 import com.zzandrive.core.settlement.SkipReason
 import java.math.BigDecimal
@@ -29,6 +30,32 @@ object WonFormat {
     }
 
     fun spoken(amount: BigDecimal): String = spoken(amount.toWon())
+}
+
+/**
+ * How the hourly time value of a comparison is named (spec D-08): the minimum wage by its name, so nobody reads it as
+ * a figure someone typed in; any other value as the amount the driver set.
+ */
+object TimeValueWords {
+    private fun isMinimum(wageWon: Long): Boolean = wageWon == PlanReference.MINIMUM_WAGE_PER_HOUR.toLong()
+
+    /** Screen: "2026년 최저시급 10,320원", "시급 15,000원(설정)". */
+    fun screen(wageWon: Long): String =
+        if (isMinimum(wageWon)) "${PlanReference.MINIMUM_WAGE_YEAR}년 최저시급 ${WonFormat.screen(wageWon)}" else "시급 ${WonFormat.screen(wageWon)}(설정)"
+
+    /** Speech: "최저시급", "시급 15,000원". */
+    fun spoken(wageWon: Long): String = if (isMinimum(wageWon)) "최저시급" else "시급 ${WonFormat.screen(wageWon)}"
+
+    /** A settings chip: "최저시급 10,320원", "15,000원". */
+    fun choice(wageWon: Long): String = if (isMinimum(wageWon)) "최저시급 ${WonFormat.screen(wageWon)}" else WonFormat.screen(wageWon)
+
+    /** One line for the "계산 근거" popup: where the hourly value comes from. */
+    fun basis(wageWon: Long): String =
+        if (isMinimum(wageWon)) {
+            "시급: ${screen(wageWon)} (${PlanReference.MINIMUM_WAGE_SOURCE})"
+        } else {
+            "시급: 설정에서 고른 ${WonFormat.screen(wageWon)} (기본은 ${screen(PlanReference.MINIMUM_WAGE_PER_HOUR.toLong())})"
+        }
 }
 
 /** Korean particles that depend on the last syllable (받침): 가/이, 를/을, 로/으로. */
@@ -220,7 +247,7 @@ class VoiceLines(private val persona: Persona) {
      */
     fun routeAdvice(best: String, rival: String?, minutesFaster: Int, costMoreWon: Long, wageWon: Long): String {
         val b = Josa.ga(best)
-        val wage = "시급 ${WonFormat.screen(wageWon)}으로 치면 $b 나아${end()}"
+        val wage = "${Josa.ro(TimeValueWords.spoken(wageWon))} 치면 $b 나아${end()}"
         return when {
             rival == null -> "$b 제일 빠르고 운행비도 제일 적어${end()}"
             minutesFaster > 0 && costMoreWon > 0 -> "$b ${rival}보다 ${minutesFaster}분 빠르고 ${WonFormat.spoken(costMoreWon)} 더 들어. $wage"

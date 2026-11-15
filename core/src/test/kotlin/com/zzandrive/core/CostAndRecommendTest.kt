@@ -44,7 +44,7 @@ class CostAndRecommendTest {
 
     @Test
     fun `TV-03 time value decides the route`() {
-        val tv = PlanReference.TIME_VALUE_PER_HOUR
+        val tv = bd(5000) // the vector's own time value (spec TV-03); the app's default is the minimum wage (TimeValueTest)
         // Toll road 30 min faster but 2,100 more: 30 min = 2,500 >= 2,100 -> toll road.
         val toll = CostCalculator.comparisonValue(bd(2100), bd(0), tv)
         val free = CostCalculator.comparisonValue(bd(0), bd(30), tv)

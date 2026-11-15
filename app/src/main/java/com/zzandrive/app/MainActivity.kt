@@ -59,12 +59,14 @@ import com.zzandrive.app.voice.SpeechClip
 import com.zzandrive.core.domain.CharacterProgress
 import com.zzandrive.core.domain.CompareMode
 import com.zzandrive.core.domain.CreditRule
+import com.zzandrive.core.domain.PlanReference
 import com.zzandrive.core.domain.RoutePlanner
 import com.zzandrive.core.domain.RoutePolicy
 import com.zzandrive.core.domain.TriggerPolicy
 import com.zzandrive.core.domain.toWon
 import com.zzandrive.core.voice.Josa
 import com.zzandrive.core.voice.Persona
+import com.zzandrive.core.voice.TimeValueWords
 import com.zzandrive.core.voice.WonFormat
 import com.zzandrive.data.api.Cancellable
 import com.zzandrive.data.api.DataOrigin
@@ -809,7 +811,7 @@ class MainActivity : Activity() {
                 "시간 포함".takeIf { whole },
                 rec.referenceName?.takeIf { !whole }?.let { "$it 기준" },
                 rec.fillLabel ?: "${rec.plannedQuantity.stripTrailingZeros().toPlainString()}$unit",
-                rec.wagePerHour?.let { "시급 ${WonFormat.screen(it.toWon())}" },
+                rec.wagePerHour?.let { "${TimeValueWords.screen(it.toWon())} 기준" },
             ).joinToString(" · "),
         )
         recCard.body.removeAllViews()
@@ -876,6 +878,7 @@ class MainActivity : Activity() {
                 },
                 if (whole) {
                     "총 지출 = 전체 주행 연료비 + 넣을 양 × (이곳 단가 − 기준 단가) + 통행료 + 주행 시간 × 시급\n" +
+                        (rec.wagePerHour?.let { "${TimeValueWords.basis(it.toWon())}\n" } ?: "") +
                         "기준 단가 ${rec.travelPrice?.let { WonFormat.screen(it, 2) }}/$unit: ${DataOrigin.SURVEY.label}\n$efficiency\n가격·경로: ${best.origin.label}"
                 } else {
                     "거리는 도로 거리예요.\n가격·도로 거리: ${best.origin.label}\n$efficiency"
@@ -907,7 +910,7 @@ class MainActivity : Activity() {
         routeCard.title.setKorean(
             if (allStop) "${c.destinationName}까지 어느 길이든 알림 기준 아래로 내려가요" else "${c.destinationName}까지 ${Josa.ga(best.option.name)} 나아요",
         )
-        routeCard.sub("출발 전 · 시간 포함 · 시급 ${WonFormat.screen(c.wagePerHour.toWon())}")
+        routeCard.sub("출발 전 · 시간 포함 · ${TimeValueWords.screen(c.wagePerHour.toWon())} 기준")
         routeCard.body.removeAllViews()
         routeCard.body.addView(rowHeader("시간 포함 · 운행비"))
         c.results.forEach { r ->
@@ -941,6 +944,7 @@ class MainActivity : Activity() {
         val place = if (electric) "충전소" else "주유소"
         routeCard.info(
             "시간 포함 = 운행비 + 걸리는 시간 × 시급. 이 비교는 절약액으로 쌓지 않아요.\n" +
+                "${TimeValueWords.basis(c.wagePerHour.toWon())}\n" +
                 when {
                     allStop -> "어느 길로 가도 도착 전에 알림 기준(${s.threshold}%) 아래로 내려가요. 알림이 뜨면 가는 길 ${place}를 들르는 경로를 비교해 드려요.\n"
                     c.results.any { it.needsStop } -> "알림 기준 아래로 내려가는 길은 가는 길 ${place}를 함께 봐야 해서 추천에서 뺐어요.\n"
@@ -1103,7 +1107,7 @@ class MainActivity : Activity() {
             wageRow.removeAllViews()
             RoutePlanner.WAGE_CHOICES.forEachIndexed { i, w ->
                 wageRow.addView(
-                    button(WonFormat.screen(w.toLong()), if (w == s.wage) Kind.FILLED else Kind.SECONDARY) { controller?.setWage(w) },
+                    button(TimeValueWords.choice(w.toLong()), if (w == s.wage) Kind.FILLED else Kind.SECONDARY) { controller?.setWage(w) },
                     LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { if (i > 0) marginStart = dp(Pleos.GAP) },
                 )
             }
@@ -1726,7 +1730,7 @@ class MainActivity : Activity() {
         section("음성으로 답하기", "물은 뒤 5초 동안 들어요. \"응\", \"아니\", \"가득\"처럼 짧게 답하면 돼요.")
         voiceRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         settingsPopup.content.addView(voiceRow)
-        section("시간의 값 (시급)", "경로를 비교할 때 1시간을 이 금액으로 쳐요.")
+        section("시간의 값 (시급)", "경로를 비교할 때 1시간을 이 금액으로 쳐요. 기본은 ${PlanReference.MINIMUM_WAGE_YEAR}년 최저시급이에요.")
         wageRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         settingsPopup.content.addView(wageRow)
         settingsPopup.action("닫기", Kind.PRIMARY) {

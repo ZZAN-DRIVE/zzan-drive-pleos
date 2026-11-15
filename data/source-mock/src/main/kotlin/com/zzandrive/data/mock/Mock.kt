@@ -136,8 +136,8 @@ class FixtureStationSource(private val stations: List<StationOffer> = FixtureSta
  */
 class FixtureRouteSource(private val remainingKm: BigDecimal = BigDecimal("100")) : RouteSource {
     /**
-     * Three made-up routes to 강릉 for the departure comparison (예시 데이터, not a route API). At the default 5,000원
-     * an hour the slower 국도 wins; at 10,000원 the 고속도로 does, so the wage setting visibly matters.
+     * Three made-up routes to 강릉 for the departure comparison (예시 데이터, not a route API). At the minimum wage
+     * (10,320원 an hour, the default) the 70 minutes the 고속도로 saves outweigh the 7,575원 more it costs to run.
      */
     override fun choices(energyType: EnergyType): RouteChoices = RouteChoices(
         destinationName = "강릉",

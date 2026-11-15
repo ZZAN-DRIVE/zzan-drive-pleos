@@ -140,8 +140,16 @@ object PlanReference {
     val DEMO_FUEL_EFFICIENCY = Efficiency(bd("10"), DataOrigin.PLAN_EXAMPLE)
     val DEMO_EV_EFFICIENCY = Efficiency(bd("5"), DataOrigin.PLAN_EXAMPLE)
 
-    /** Default time value (D-08). */
-    val TIME_VALUE_PER_HOUR: BigDecimal = bd("5000")
+    /**
+     * 최저시급 (기획서 별지 1 "최저시급 기준"): 2026년 적용 최저임금, 시간급 10,320원 ([MINIMUM_WAGE_SOURCE]).
+     * Renew it when the notice changes (2027년 적용 10,700원).
+     */
+    const val MINIMUM_WAGE_YEAR = 2026
+    val MINIMUM_WAGE_PER_HOUR: BigDecimal = bd("10320")
+    const val MINIMUM_WAGE_SOURCE = "고용노동부 고시 제2025-47호"
+
+    /** Default time value (D-08): the minimum wage, as the plan calculates. */
+    val TIME_VALUE_PER_HOUR: BigDecimal = MINIMUM_WAGE_PER_HOUR
 
     /** 기획서 3-1 "연비(특정 사양 공인값)": what the app calculates with (spec D-14). */
     fun surveyEfficiency(type: EnergyType): Efficiency = Efficiency(survey(type).efficiency, DataOrigin.SURVEY)

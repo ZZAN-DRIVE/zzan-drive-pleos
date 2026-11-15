@@ -8,7 +8,7 @@
 #   scripts/demo.sh scenario-pass   # 기회비용: B를 승인하고 충전 없이 지나침 → 정차 후 "77원 뺐어" → 다음 추천은 다시 열림
 #   scripts/demo.sh scenario-b-auto # 배터리 25%(정차): 앱이 먼저 넣을 양을 묻고 → 40 kWh → 추천 → 승인 → +40 kWh → 2,323원
 #   scripts/demo.sh scenario-a      # 시연 데이터(Mock): 강릉까지 100 km, 연료 10% → 넣을 양 30 L → 목적지까지 못 감
-#                                   #   → 주유소를 들르는 경로 3곳 비교(총 지출) → C가 676원 덜 듦 → 승인 → 30 L → 레벨 1
+#                                   #   → 주유소를 들르는 경로 3곳 비교(총 지출, 시간은 최저시급) → C가 1,563원 덜 듦 → 승인 → 30 L → 레벨 1
 #   scripts/demo.sh scenario-drive  # 실제 차량 데이터, 음성 대화: 주행 중 배터리 25% → 화면은 가려진 채 "얼마나 충전할래?"
 #                                   #   → (인식 결과) 40 kWh → 양을 되말하며 추천 → 녹음된 "응"을 온디바이스 STT로 인식 → 승인
 #   scripts/demo.sh scenario-drive-quiet # 음성 답 끔: 주행 중엔 한 줄만 말하고 정차하면 넣을 양을 묻는다
@@ -305,10 +305,10 @@ play_a() {
   adb_s logcat -c
   record_start
 
-  scene 0 "출발 전 경로 비교 (예시 데이터)" "강릉까지 고속도로·국도·혼합 경로. 운행비 + 시간 × 시급(5,000원)으로 비교한다. 이 비교는 절약액으로 쌓지 않는다"
+  scene 0 "출발 전 경로 비교 (예시 데이터)" "강릉까지 고속도로·국도·혼합 경로. 운행비 + 시간 × 2026년 최저시급(10,320원)으로 비교한다. 이 비교는 절약액으로 쌓지 않는다"
   app_front --es zzan.demo A
-  check "three routes compared" "^ROUTES dest=강릉 best=national rival=highway faster=-70 costMore=-7575 wage=5000 highway:37892\+13333 national:30317\+19167 mixed:34105\+16250" 15
-  check "spoken" "^SAY 국도가 고속도로보다 70분 느리지만 약 7,600원 덜 들어\. 시급 5,000원으로 치면 국도가 나아!" 5
+  check "three routes compared at the minimum wage" "^ROUTES dest=강릉 best=highway rival=national faster=70 costMore=7575 wage=10320 highway:37892\+27520 national:30317\+39560 mixed:34105\+33540" 15
+  check "spoken" "^SAY 고속도로가 국도보다 70분 빠르고 약 7,600원 더 들어\. 최저시급으로 치면 고속도로가 나아!" 5
   hold 6
   app_cmd routesok
   check "card closed, the trip goes on" "^ROUTES closed" 5
@@ -323,27 +323,27 @@ play_a() {
   SCN_TAG="ZzanDemo"
   hold 3
 
-  scene 2 "30 L" "남은 6 L로 갈 수 있는 거리는 83 km(강릉까지 100 km): 목적지까지 못 간다. 주유소를 들르는 경로의 총 지출(연료비 + 가격 차이 + 통행료 + 시간비용)이 낮은 3곳을 보여 주고, C가 가장 비싼 B보다 676원 덜 든다"
+  scene 2 "30 L" "남은 6 L로 갈 수 있는 거리는 83 km(강릉까지 100 km): 목적지까지 못 간다. 주유소를 들르는 경로의 총 지출(연료비 + 가격 차이 + 통행료 + 시간비용)이 낮은 3곳을 보여 주고, 시간은 최저시급으로 친다. C가 가장 비싼 B보다 1,563원 덜 든다"
   app_cmd fill --es zzan.arg q30
   check "destination out of range" "^ROUTE dest=강릉 remainKm=100 branch=UNREACHABLE limitKm=82\.6 reachable=route-a,route-b,route-c,route-d,route-e reach=no" 10
-  check "three routes, the lowest total at 0" "^TOTAL ref=1855\.43 wage=5000 qty=30 route-c:15134\(0\) route-d:15450\(-316\) route-b:15810\(-676\)" 10
-  check "recommendation" "^REC .*baseline=route-b best=route-c expected=676 mode=ROUTE_TOTAL rule=VS_WORST qty=30" 10
-  check "spoken" "^SAY 이대로는 목적지까지 못 가\. 시간까지 치면 강릉길 C 주유소가 약 680원 덜 들어\. 들를까\?" 5
+  check "three routes, the lowest total at 0" "^TOTAL ref=1855\.43 wage=10320 qty=30 route-c:23114\(0\) route-a:24224\(-1110\) route-b:24677\(-1563\)" 10
+  check "recommendation" "^REC .*baseline=route-a best=route-c expected=1563 mode=ROUTE_TOTAL rule=VS_WORST qty=30" 10
+  check "spoken" "^SAY 이대로는 목적지까지 못 가\. 시간까지 치면 강릉길 C 주유소가 약 1,600원 덜 들어\. 들를까\?" 5
   hold 8
 
   scene 3 "응, 들를게" "승인하면 C 주유소로 안내한다"
   approve
   hold 3
 
-  scene 4 "주유 → 출발 → 정차" "30 L 주유 확인 → 676원 확정(시간비용 포함). 주행 중에는 음성 한 줄만, 레벨업 화면은 정차한 뒤 (삼각김밥)"
+  scene 4 "주유 → 출발 → 정차" "30 L 주유 확인 → 1,563원 확정(시간비용 포함). 주행 중에는 음성 한 줄만, 레벨업 화면은 정차한 뒤 (삼각김밥)"
   check "detected 30 L at C" "^DETECT .*q=30\.000 .*station=route-c" 30
-  check "settled 676원 → level 1" "^SETTLE amount=676 level=1 accrual=176 remaining=2324" 10
-  check "while driving: voice only" "^SAY 약 680원 아꼈어" 10
-  check "after parking: level-up" "^SAY 삼각김밥 레벨 달성! 아메리카노까지 약 2,300원 남았어" 20
+  check "settled 1,563원 → level 1" "^SETTLE amount=1563 level=1 accrual=1063 remaining=1437" 10
+  check "while driving: voice only" "^SAY 약 1,600원 아꼈어" 10
+  check "after parking: level-up" "^SAY 삼각김밥 레벨 달성! 아메리카노까지 약 1,400원 남았어" 20
   check "level-up screen" "^SHOW level-up 1" 10
   check "level-up clip" "^CLIP .*_levelup\.webp" 10
   check "eats 삼각김밥" "^CLIP .*_lv0?1_[a-z0-9]+_eat(_bolt[0-9]{3})?(_v[0-9]+)?\.webp" 15
-  check "bolt: 176 of 2,500원" "^BOLT 7 lv=1( |\$)" 10
+  check "bolt: 1,063 of 2,500원" "^BOLT 42 lv=1( |\$)" 10
   hold 3
   record_stop
   app_front --es zzan.demo off

@@ -74,8 +74,8 @@ object RoutePlanner {
     /** Default hourly wage for the time value (D-08, D-31). */
     val DEFAULT_WAGE_PER_HOUR: BigDecimal = PlanReference.TIME_VALUE_PER_HOUR
 
-    /** Wages the settings offer (won per hour). */
-    val WAGE_CHOICES: List<Int> = listOf(5_000, 10_000, 20_000)
+    /** Wages the settings offer (won per hour): the minimum wage first, then higher values of one's own time. */
+    val WAGE_CHOICES: List<Int> = listOf(PlanReference.MINIMUM_WAGE_PER_HOUR.toInt(), 15_000, 20_000)
 
     /** [energyNow] and [thresholdAmount] (L or kWh), when known, mark the routes that reach the alert level on the way. */
     fun compare(

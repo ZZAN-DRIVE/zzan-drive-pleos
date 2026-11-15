@@ -48,6 +48,24 @@ class RouteChoicesTest {
     }
 
     @Test
+    fun `at the minimum wage, the default, the expressway wins - 70 minutes are worth more than 7,575 won`() {
+        val official = PlanReference.surveyEfficiency(EnergyType.GASOLINE)
+        assertEquals(bd("10320"), RoutePlanner.DEFAULT_WAGE_PER_HOUR)
+        val c = RoutePlanner.compare(routes, official, price, RoutePlanner.DEFAULT_WAGE_PER_HOUR)!!
+        assertEquals(listOf(37_892L, 30_317L, 34_105L), c.results.map { it.operatingCost.toWon() })
+        assertEquals(listOf(27_520L, 39_560L, 33_540L), c.results.map { it.timeValue.toWon() }) // 160, 230, 195 min
+        assertEquals(listOf(65_412L, 69_877L, 67_645L), c.results.map { it.value.toWon() })
+        assertEquals("highway", c.best.option.id)
+        assertEquals("national", c.rival!!.option.id)
+        assertEquals(70, c.minutesFaster)
+        assertEquals(7_575L, c.costMoreWon)
+        assertEquals(
+            "고속도로가 국도보다 70분 빠르고 약 7,600원 더 들어. 최저시급으로 치면 고속도로가 나아!",
+            VoiceLines(Persona.ZZANDORI).routeAdvice(c.best.option.name, c.rival?.option?.name, c.minutesFaster, c.costMoreWon, 10_320),
+        )
+    }
+
+    @Test
     fun `a route that reaches the alert level on the way is not recommended without a stop`() {
         // 40 L, alert at 30 % of 60 L = 18 L: every route arrives with 15~17 L, so none is free of a stop.
         val tight = RoutePlanner.compare(routes, PlanReference.DEMO_FUEL_EFFICIENCY, price, bd("5000"), energyNow = bd("40"), thresholdAmount = bd("18"))!!

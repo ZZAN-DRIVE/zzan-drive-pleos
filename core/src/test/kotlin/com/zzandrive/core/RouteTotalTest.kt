@@ -140,6 +140,39 @@ class RouteTotalTest {
         assertEquals(2_324L, CharacterProgress().remainingToNext(after.state))
     }
 
+    /** 기획서 별지 1 예시(상황 4): 주유소 A·B·C, 연비 10 km/L, 기준 단가 1,700원, 30 L, 최저시급 10,320원. */
+    @Test
+    fun `the plan's example at the minimum wage - 33,760, 34,700 and 33,040 won, C saves 1,660`() {
+        val three = five.take(3)
+        val wage = PlanReference.MINIMUM_WAGE_PER_HOUR
+        val totals = three.associate { it.id to CostCalculator.routeTotal(bd(30), it, bd(10), bd(1700), wage) }
+        assertEquals(listOf(33_760L, 34_700L, 33_040L), listOf("A", "B", "C").map { totals.getValue(it).total.toWon() })
+        // C in parts, as the plan writes it: 18,360 − 1,800 + 1,000 + 15,480.
+        val c = totals.getValue("C")
+        assertEquals(listOf("18360.00", "-1800.00", "1000.00", "15480.00").map(::bd), listOf(c.detourCost, c.energyCost, c.toll, c.timeCost).map { it.cents() })
+        val r = plan(offers = three, wage = "10320")
+        assertEquals("C", r.best.offer.id)
+        assertEquals(listOf(0L, -720L, -1_660L), r.ranked.map { r.best.total.subtract(it.total).toWon() })
+        assertEquals(1_660L, r.expectedSaving.toWon())
+    }
+
+    /** 시연 A as the app plays it: the five stations, 15.3 km/L, 1,855.43원/L, 30 L, the minimum wage (the default). */
+    @Test
+    fun `at the minimum wage with the official efficiency C saves 1,563 won against the dearest of the three`() {
+        val r = plan(efficiency = official, reference = "1855.43", wage = "10320")
+        assertEquals(listOf("C", "A", "B"), r.ranked.map { it.offer.id })
+        assertEquals(listOf(23_114L, 24_224L, 24_677L), r.ranked.map { it.total.toWon() })
+        assertEquals(listOf(0L, -1_110L, -1_563L), r.ranked.map { r.best.total.subtract(it.total).toWon() })
+        assertEquals(1_563L, r.expectedSaving.toWon())
+        assertEquals(bd(10320), r.wagePerHour)
+        assertEquals(1_563L, (credit(r, 30.0, "C") as SettlementDecision.Credit).amountWon)
+        assertEquals(1_463L, (credit(r, 25.0, "C") as SettlementDecision.Credit).amountWon) // 100원 less for 5 L less at 20원/L cheaper
+        // The scenario: level 0 with 1,000원 → level 1 with 1,063원, 1,437원 to the next.
+        val after = CharacterProgress().applySaving(CharacterState(0, 1_000), 1_563)
+        assertEquals(CharacterState(1, 1_063), after.state)
+        assertEquals(1_437L, CharacterProgress().remainingToNext(after.state))
+    }
+
     @Test
     fun `the hourly wage moves the comparison because time is part of the total`() {
         val ten = plan(wage = "10000")

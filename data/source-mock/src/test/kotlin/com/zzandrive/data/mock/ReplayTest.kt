@@ -126,7 +126,7 @@ class ReplayTest {
     }
 
     @Test
-    fun `scenario A - 100 km with 6 L is out of range, the three cheapest whole routes, 676 won against the dearest of them`() {
+    fun `scenario A - 100 km with 6 L is out of range, the three cheapest whole routes, 1,563 won against the dearest of them`() {
         val route = FixtureRouteSource().active(EnergyType.GASOLINE)!!
         val eff = fuel.kmPerUnit // 15.3 km/L
         val threshold = bd(12) // 20 % of 60 L
@@ -141,10 +141,12 @@ class ReplayTest {
         )!!
         assertEquals(CompareMode.ROUTE_TOTAL, rec.mode)
         assertEquals(CreditRule.VS_WORST, rec.creditRule)
-        assertEquals(listOf("route-c", "route-d", "route-b"), rec.ranked.map { it.offer.id })
-        assertEquals(listOf(15_134L, 15_450L, 15_810L), rec.ranked.map { it.total.toWon() })
-        assertEquals(listOf(0L, -316L, -676L), rec.ranked.map { rec.best.total.subtract(it.total).toWon() })
-        assertEquals(676L, rec.expectedSaving.toWon())
+        // Time is counted at the minimum wage (10,320원 an hour, the default): the 90-minute route through C leads.
+        assertEquals(PlanReference.MINIMUM_WAGE_PER_HOUR, rec.wagePerHour)
+        assertEquals(listOf("route-c", "route-a", "route-b"), rec.ranked.map { it.offer.id })
+        assertEquals(listOf(23_114L, 24_224L, 24_677L), rec.ranked.map { it.total.toWon() })
+        assertEquals(listOf(0L, -1_110L, -1_563L), rec.ranked.map { rec.best.total.subtract(it.total).toWon() })
+        assertEquals(1_563L, rec.expectedSaving.toWon())
         val d = detections(
             EnergyType.GASOLINE, RefillConfig.FUEL, Scenarios.fuelLow(),
             Scenarios.fuelRefillAtB(addL = 30.0, at = FixtureStations.ROUTE_C.location!!),
@@ -152,7 +154,7 @@ class ReplayTest {
         assertEquals(30.0, d.quantity, 1e-9)
         val used = StationMatcher.match(d.location, rec.ranked.associate { it.offer.id to it.offer.location })
         assertEquals("route-c", used)
-        assertEquals(676L, (SettlementPolicy.decide(rec, true, d, used) as SettlementDecision.Credit).amountWon)
+        assertEquals(1_563L, (SettlementPolicy.decide(rec, true, d, used) as SettlementDecision.Credit).amountWon)
         // The fastest way on without a stop is known too (it joins the comparison when the destination is within range).
         assertEquals("주유 없이 가기", RoutePolicy.noStopOffer(route, EnergyType.GASOLINE, PlanReference.survey(EnergyType.GASOLINE).unitPrice)!!.name)
         // Electric cars have no route in this fixture: the search stays around the current location.
