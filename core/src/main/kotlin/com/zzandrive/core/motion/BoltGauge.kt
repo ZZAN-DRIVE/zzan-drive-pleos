@@ -28,3 +28,21 @@ object BoltGauge {
         return empty - f * (empty - full)
     }
 }
+
+/**
+ * The ring above the second character's head as the same gauge (spec D-42). The team's v05 clips come in six steps
+ * (0·30·50·70·90·100 %) that differ only there: the whole ring goes from half-transparent white to gold, close to a
+ * straight line in between (the designer's 30/50/70/90 % files sit 0.33/0.53/0.73/0.91 of the way). The app ships the
+ * gold one (`_halo100`) and moves it toward the empty look at run time (app `BoltShade`).
+ */
+object HaloGauge {
+    /**
+     * The box the ring stays in, in canvas px (right and bottom excluded): measured on every third frame of the level
+     * 0, 3, 6 and 10 clips, the ring keeps to rows 54..117 and columns 218..492 and the head stays below row 129, so
+     * nothing else is inside.
+     */
+    const val LEFT = 200f
+    const val TOP = 40f
+    const val RIGHT = 520f
+    const val BOTTOM = 124f
+}

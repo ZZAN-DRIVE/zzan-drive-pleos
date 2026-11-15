@@ -10,6 +10,7 @@ import android.util.Log
 import android.widget.ImageView
 import com.zzandrive.core.motion.BoltGauge
 import com.zzandrive.core.motion.Clip
+import com.zzandrive.core.motion.HaloGauge
 import kotlin.math.roundToInt
 
 /**
@@ -22,6 +23,7 @@ import kotlin.math.roundToInt
  */
 internal class BoltShade {
     private var shader: Any? = null // RuntimeShader, kept as Any so this class also loads before Android 13
+    private var haloShader: Any? = null
 
     /**
      * Shows [fill] (0..1) of the bolt on [iv], which shows [clip]. Clips without a full bolt drawn in them, and a full
@@ -30,14 +32,15 @@ internal class BoltShade {
     fun apply(iv: ImageView, clip: Clip?, fill: Float, tag: String): Rect? {
         val d = iv.drawable
         val level = clip?.level
-        if (failed || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || clip?.bolt != FULL || level == null ||
+        val halo = clip?.halo == FULL // the second character's ring (spec D-42)
+        if (failed || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || (clip?.bolt != FULL && !halo) || level == null ||
             d == null || d.intrinsicWidth <= 0 || fill >= 1f
         ) {
             clear(iv)
             return null
         }
         return try {
-            shade(iv, d.intrinsicWidth, level, fill)
+            if (halo) ring(iv, d.intrinsicWidth, fill) else shade(iv, d.intrinsicWidth, level, fill)
         } catch (e: RuntimeException) { // the shader did not compile or a uniform was refused
             failed = true
             Log.w(tag, "BOLT off", e)
@@ -62,6 +65,23 @@ internal class BoltShade {
         iv.setRenderEffect(RenderEffect.createRuntimeShaderEffect(s, "src"))
         fun px(canvas: Float, origin: Float) = (origin + canvas * scale).roundToInt()
         return Rect(px(BoltGauge.LEFT, x), px(BoltGauge.TOP, y), px(BoltGauge.RIGHT, x), px(BoltGauge.BOTTOM, y))
+    }
+
+    /** The ring above the second character's head: all of it moves from gold toward half-transparent white. */
+    @TargetApi(Build.VERSION_CODES.TIRAMISU)
+    private fun ring(iv: ImageView, drawnWidth: Int, fill: Float): Rect {
+        val s = haloShader as? RuntimeShader ?: RuntimeShader(HALO_AGSL).also { haloShader = it }
+        val m = FloatArray(9).also { iv.imageMatrix.getValues(it) }
+        val x = m[Matrix.MTRANS_X]
+        val y = m[Matrix.MTRANS_Y]
+        val scale = m[Matrix.MSCALE_X] * drawnWidth / BoltGauge.CANVAS
+        s.setFloatUniform("origin", x, y)
+        s.setFloatUniform("scale", scale)
+        s.setFloatUniform("box", HaloGauge.LEFT, HaloGauge.TOP, HaloGauge.RIGHT, HaloGauge.BOTTOM)
+        s.setFloatUniform("fill", fill.coerceIn(0f, 1f))
+        iv.setRenderEffect(RenderEffect.createRuntimeShaderEffect(s, "src"))
+        fun px(canvas: Float, origin: Float) = (origin + canvas * scale).roundToInt()
+        return Rect(px(HaloGauge.LEFT, x), px(HaloGauge.TOP, y), px(HaloGauge.RIGHT, x), px(HaloGauge.BOTTOM, y))
     }
 
     companion object {
@@ -98,6 +118,32 @@ internal class BoltShade {
                 float above = 1.0 - smoothstep(fillLine - 0.5, fillLine + 0.5, q.y);
                 float grey = 0.986 * max(rgb.r, rgb.g) - 0.026;
                 return half4(float4(mix(rgb, float3(grey), yellow * above) * c.a, c.a));
+            }
+        """
+
+        /**
+         * Inside the ring's box (canvas px) every pixel is the ring. At fill 0 it is the designer's empty ring: grey =
+         * 0.800 × R + 61.8/255 and half the alpha (fitted to the 0 % file, RMSE 13/255); in between a straight line,
+         * as the designer's 30/50/70/90 % files are. Colours come premultiplied.
+         */
+        private const val HALO_AGSL = """
+            uniform shader src;
+            uniform float2 origin;
+            uniform float scale;
+            uniform float4 box;
+            uniform float fill;
+
+            half4 main(float2 p) {
+                float4 c = float4(src.eval(p));
+                float2 q = (p - origin) / scale;
+                if (c.a <= 0.0 || q.x < box.x || q.x >= box.z || q.y < box.y || q.y >= box.w) {
+                    return half4(c);
+                }
+                float3 rgb = c.rgb / c.a;
+                float t = 1.0 - fill;
+                float a = c.a * (1.0 - 0.5 * t);
+                float grey = min(0.800 * rgb.r + 0.242, 1.0);
+                return half4(float4(mix(rgb, float3(grey), t) * a, a));
             }
         """
     }

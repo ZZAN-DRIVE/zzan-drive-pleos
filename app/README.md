@@ -31,7 +31,7 @@ Pleos Connect(Android Automotive)에서 실행되는 앱 모듈이다. 화면, �
 - 진단 화면과 디버그 명령은 **debug 빌드에서만** adb로 실행할 수 있다(`manifestPlaceholders["diagExported"]`).
 - `abiFilters`는 `arm64-v8a`(Apple Silicon 에뮬레이터·차량)와 `x86_64`(Windows 에뮬레이터)다. TTS·STT가 쓰는 `libuacore.so`가 이 두 ABI를 제공한다.
 - 캐릭터는 3D로 미리 렌더링한 투명 애니메이션 WebP(720×720, 24fps)다. 프레임워크 `AnimatedImageDrawable`로 재생한다. 앱 안에서 3D를 그리지 않으므로 3D 엔진(Filament 등) 같은 추가 라이브러리가 없다.
-- 캐릭터 에셋: `src/main/assets/character/<zzandori|zzansuni>/`. 이름 규칙 `*_idle|levelup|happy|sad.webp`, `*_lv<N>_<음식>_(eat|hold)[_bolt<NNN>][_v<N>].webp`, 동사 없는 `*_lv<N>_<음식>_bolt<NNN>[_v<N>].webp`(레벨 0 빈 지갑. 먹기로 친다)를 따르면 코드 수정 없이 인식한다. 같은 역할의 파일이 여러 개면 번개가 가장 찬 것, 그다음 최신 버전을 쓴다. 짠돌이는 디자이너 v23 먹기 클립 11개(번개 100%)와 대기·레벨업·기쁨·시무룩 4개, 모두 15개 62.9 MB다. 짠순이 폴더가 비어 있으면 짠돌이 그림을 쓰고 "그림 준비 중"을 표시한다. WebP는 압축하지 않고 APK에 넣는다(`noCompress`).
+- 캐릭터 에셋: `src/main/assets/character/<zzandori|zzansuni>/`. 이름 규칙 `*_idle|levelup|happy|sad.webp`, `*_lv<N>_<음식>_(eat|hold)[_bolt<NNN>][_v<N>].webp`, 동사 없는 `*_lv<N>_<음식>_bolt<NNN>[_v<N>].webp`(레벨 0 빈 지갑. 먹기로 친다), 짠순이 그림처럼 `bolt` 자리에 `halo`를 쓴 이름을 따르면 코드 수정 없이 인식한다. 같은 역할의 파일이 여러 개면 번개가 가장 찬 것, 그다음 최신 버전을 쓴다. 짠돌이는 디자이너 v23 먹기 클립 11개(번개 100%)와 대기·레벨업·기쁨·시무룩 4개, 모두 15개 62.9 MB다. 짠순이는 디자이너 v05 먹기 클립 11개(고리 100%)를 12fps·품질 35로 다시 인코딩한 15.9 MB다(원본 60.0 MB, D-42). 캐릭터 폴더가 비어 있으면 짠돌이 그림을 쓰고 "그림 준비 중"을 표시한다. WebP는 압축하지 않고 APK에 넣는다(`noCompress`).
 - 화면은 onStart~onStop 동안만 상태를 구독하고 그린다. 창 크기·방향 변경은 `configChanges`로 받아 배치만 바꾼다(캐릭터 재생이 끊기지 않음). 주간·야간 전환은 화면을 다시 만든다.
 
 ## 실행

@@ -74,7 +74,9 @@ class CharacterClipsTest {
     fun `the character chooser shows the plain idle, not the sad empty wallet`() {
         assertEquals("jjandol_idle.webp", clips.portrait()?.name)
         val noIdle = CharacterClips.parse("character/x", listOf("x_lv00_wallet_bolt100_v23.webp", "x_lv01_samgak_eat_bolt100_v23.webp"))
-        assertEquals("x_lv00_wallet_bolt100_v23.webp", noIdle.portrait()?.name)
+        assertEquals("x_lv01_samgak_eat_bolt100_v23.webp", noIdle.portrait()?.name) // no idle: the first food
+        val walletOnly = CharacterClips.parse("character/x", listOf("x_lv00_wallet_bolt100_v23.webp"))
+        assertEquals("x_lv00_wallet_bolt100_v23.webp", walletOnly.portrait()?.name)
     }
 
     @Test
@@ -145,6 +147,24 @@ class CharacterClipsTest {
         assertEquals("jjansun_idle.webp", sun.base(1)?.name)
         assertEquals("jjansun_lv10_kingcrab_eat.webp", sun.base(10)?.name) // no hold clip: rests on eating
         assertTrue(sun.levelUp(10).isEmpty()) // no level-up clip either: straight to that loop
+    }
+
+    @Test
+    fun `the second character's halo clips are its eating loops`() {
+        val sun = CharacterClips.parse(
+            "character/zzansuni",
+            listOf(
+                "jjansoon_lv00_wallet_halo100_v05.webp", "jjansoon_lv01_samgak_eat_halo100_v05.webp",
+                "jjansoon_lv03_jjajang_eat_halo000_v05.webp", "jjansoon_lv03_jjajang_eat_halo100_v05.webp",
+            ),
+        )
+        assertEquals("jjansoon_lv00_wallet_halo100_v05.webp", sun.base(0)?.name)
+        assertEquals("jjansoon_lv03_jjajang_eat_halo100_v05.webp", sun.base(3)?.name)
+        assertEquals(100, sun.base(3)?.halo)
+        assertNull(sun.base(3)?.bolt)
+        assertEquals("jjansoon_lv01_samgak_eat_halo100_v05.webp", sun.portrait()?.name) // no idle: the first food, not the empty wallet
+        assertTrue(sun.levelUp(3).isEmpty())
+        assertFalse(CharacterClips.resolve(sun, clips).borrowed)
     }
 
     @Test
